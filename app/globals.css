@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f3efe7;
+  --foreground: #2f2922;
+  --font-app-sans: Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-app-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-app-sans);
+  --font-mono: var(--font-app-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-app-sans);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+.book-cover {
+  transform-origin: left center;
+}
+
+.book-publishing {
+  animation: book-close 1.2s ease-in-out forwards;
+}
+
+.published-stamp {
+  animation: stamp-in 0.45s ease-out both;
+}
+
+.book-page {
+  background-image:
+    linear-gradient(90deg, rgba(128, 103, 66, 0.06) 0, rgba(128, 103, 66, 0) 36px),
+    radial-gradient(circle at 30% 20%, rgba(217, 180, 95, 0.08), transparent 28%),
+    linear-gradient(#fffdf8, #fffaf1);
+}
+
+@keyframes book-close {
+  0% {
+    transform: perspective(1200px) rotateY(0deg) scale(1);
+  }
+  58% {
+    transform: perspective(1200px) rotateY(-16deg) scale(0.985);
+  }
+  100% {
+    transform: perspective(1200px) rotateY(0deg) scale(1);
+  }
+}
+
+@keyframes stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.6) rotate(-8deg);
+  }
+  68% {
+    opacity: 1;
+    transform: scale(0.92) rotate(-8deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-8deg);
+  }
 }

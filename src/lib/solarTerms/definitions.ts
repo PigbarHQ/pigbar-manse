@@ -1,0 +1,43 @@
+import type { SolarTermDefinition } from "./types";
+
+export const SOLAR_TERM_DEFINITIONS: SolarTermDefinition[] = [
+  { name: "소한", nameHanja: "小寒", longitude: 285, approximateMonth: 1, approximateDay: 5 },
+  { name: "대한", nameHanja: "大寒", longitude: 300, approximateMonth: 1, approximateDay: 20 },
+  { name: "입춘", nameHanja: "立春", longitude: 315, approximateMonth: 2, approximateDay: 4 },
+  { name: "우수", nameHanja: "雨水", longitude: 330, approximateMonth: 2, approximateDay: 19 },
+  { name: "경칩", nameHanja: "驚蟄", longitude: 345, approximateMonth: 3, approximateDay: 6 },
+  { name: "춘분", nameHanja: "春分", longitude: 0, approximateMonth: 3, approximateDay: 21 },
+  { name: "청명", nameHanja: "淸明", longitude: 15, approximateMonth: 4, approximateDay: 5 },
+  { name: "곡우", nameHanja: "穀雨", longitude: 30, approximateMonth: 4, approximateDay: 20 },
+  { name: "입하", nameHanja: "立夏", longitude: 45, approximateMonth: 5, approximateDay: 6 },
+  { name: "소만", nameHanja: "小滿", longitude: 60, approximateMonth: 5, approximateDay: 21 },
+  { name: "망종", nameHanja: "芒種", longitude: 75, approximateMonth: 6, approximateDay: 6 },
+  { name: "하지", nameHanja: "夏至", longitude: 90, approximateMonth: 6, approximateDay: 21 },
+  { name: "소서", nameHanja: "小暑", longitude: 105, approximateMonth: 7, approximateDay: 7 },
+  { name: "대서", nameHanja: "大暑", longitude: 120, approximateMonth: 7, approximateDay: 23 },
+  { name: "입추", nameHanja: "立秋", longitude: 135, approximateMonth: 8, approximateDay: 8 },
+  { name: "처서", nameHanja: "處暑", longitude: 150, approximateMonth: 8, approximateDay: 23 },
+  { name: "백로", nameHanja: "白露", longitude: 165, approximateMonth: 9, approximateDay: 8 },
+  { name: "추분", nameHanja: "秋分", longitude: 180, approximateMonth: 9, approximateDay: 23 },
+  { name: "한로", nameHanja: "寒露", longitude: 195, approximateMonth: 10, approximateDay: 8 },
+  { name: "상강", nameHanja: "霜降", longitude: 210, approximateMonth: 10, approximateDay: 23 },
+  { name: "입동", nameHanja: "立冬", longitude: 225, approximateMonth: 11, approximateDay: 7 },
+  { name: "소설", nameHanja: "小雪", longitude: 240, approximateMonth: 11, approximateDay: 22 },
+  { name: "대설", nameHanja: "大雪", longitude: 255, approximateMonth: 12, approximateDay: 7 },
+  { name: "동지", nameHanja: "冬至", longitude: 270, approximateMonth: 12, approximateDay: 22 },
+];
+
+export const JEOLGI_NAMES = new Set([
+  "소한",
+  "입춘",
+  "경칩",
+  "청명",
+  "입하",
+  "망종",
+  "소서",
+  "입추",
+  "백로",
+  "한로",
+  "입동",
+  "대설",
+]);
