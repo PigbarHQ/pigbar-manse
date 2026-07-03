@@ -2,6 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { BlueprintBook, BlueprintChapter, BlueprintParagraph } from "@/src/lib/blueprint/types";
+import type { BlueprintAppendix, CanonicalOptionalPillar } from "@/src/lib/blueprint/types/runtime";
+
+type BlueprintDebugData = {
+  canonicalManseInput: unknown;
+  classicalAnalysis?: unknown;
+  features: unknown;
+  reasons: unknown;
+  writerInput: unknown;
+  writerRuntime?: unknown;
+  appendix?: unknown;
+};
 
 type ReaderSection =
   | "cover"
@@ -10,7 +21,8 @@ type ReaderSection =
   | "prologue"
   | "toc"
   | `chapter-${number}`
-  | "notes";
+  | "notes"
+  | "appendix";
 
 type SavedReaderState = {
   published: boolean;
@@ -29,7 +41,12 @@ const sectionLabels: Record<string, string> = {
   prologue: "프롤로그",
   toc: "목차",
   notes: "My Notes",
+  appendix: "이 책의 근거",
 };
+
+function isClassicalBook(book: BlueprintBook) {
+  return book.metadata.sourceName === "Pigbar Manse Classical Mode";
+}
 
 const defaultState: SavedReaderState = {
   published: false,
@@ -37,6 +54,32 @@ const defaultState: SavedReaderState = {
   bookmarks: [],
   highlights: [],
   notes: {},
+};
+
+const emptyAppendix: BlueprintAppendix = {
+  pillars: {
+    year: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    month: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    day: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    hour: null,
+  },
+  tenGods: {},
+  elements: {},
+  twelveStages: {},
+  hiddenStems: {},
+  relations: {
+    stems: {},
+    branches: {},
+  },
+  luck: {
+    daeun: {},
+    currentDaeun: null,
+    currentYear: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    currentMonth: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    currentDay: { gan: "-", ji: "-", ganKo: "-", jiKo: "-", label: "-", confidence: 0 },
+    currentHour: null,
+  },
+  reasonTrace: [],
 };
 
 function getChapterSection(chapter: BlueprintChapter): ReaderSection {
@@ -78,16 +121,39 @@ function readSavedState(): SavedReaderState {
   }
 }
 
-export function BlueprintReader({ book }: { book: BlueprintBook }) {
-  const [readerState, setReaderState] = useState<SavedReaderState>(() => readSavedState());
+export function BlueprintReader({
+  appendix,
+  book,
+  debugData,
+  republishPanel,
+}: {
+  appendix?: BlueprintAppendix;
+  book: BlueprintBook;
+  debugData?: BlueprintDebugData;
+  republishPanel?: React.ReactNode;
+}) {
+  const [readerState, setReaderState] = useState<SavedReaderState>(defaultState);
+  const [hasLoadedSavedState, setHasLoadedSavedState] = useState(false);
   const [visibleSection, setVisibleSection] = useState<ReaderSection>("cover");
   const [isPublishing, setIsPublishing] = useState(false);
   const [showShelfNotice, setShowShelfNotice] = useState(false);
   const [activeNoteParagraphId, setActiveNoteParagraphId] = useState<string | null>(null);
+  const classicalBook = isClassicalBook(book);
 
   const readingOrder = useMemo<ReaderSection[]>(
-    () => ["cover", "dedication", "author", "prologue", "toc", ...book.chapters.map(getChapterSection), "notes"],
-    [book.chapters],
+    () => {
+      const baseOrder: ReaderSection[] = [
+        "cover",
+        "dedication",
+        "author",
+        "prologue",
+        "toc",
+        ...book.chapters.map(getChapterSection),
+      ];
+
+      return classicalBook ? [...baseOrder, "appendix"] : [...baseOrder, "notes", "appendix"];
+    },
+    [book.chapters, classicalBook],
   );
 
   const currentIndex = readingOrder.indexOf(visibleSection);
@@ -97,8 +163,21 @@ export function BlueprintReader({ book }: { book: BlueprintBook }) {
   const currentTitle = getSectionTitle(book, visibleSection);
 
   useEffect(() => {
+    const restoreSavedState = window.setTimeout(() => {
+      setReaderState(readSavedState());
+      setHasLoadedSavedState(true);
+    }, 0);
+
+    return () => window.clearTimeout(restoreSavedState);
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedSavedState) {
+      return;
+    }
+
     window.localStorage.setItem(storageKey, JSON.stringify(readerState));
-  }, [readerState]);
+  }, [hasLoadedSavedState, readerState]);
 
   function updateReaderState(updater: (state: SavedReaderState) => SavedReaderState) {
     setReaderState((state) => updater(state));
@@ -161,8 +240,12 @@ export function BlueprintReader({ book }: { book: BlueprintBook }) {
     }));
   }
 
-  const resumeSection = readerState.currentSection === "cover" ? "dedication" : readerState.currentSection;
+  const resumeSection =
+    readerState.currentSection === "cover" || (classicalBook && readerState.currentSection === "notes")
+      ? "dedication"
+      : readerState.currentSection;
   const isBookmarked = readerState.bookmarks.includes(visibleSection);
+  const appendixData = appendix ?? emptyAppendix;
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f3efe7] text-[#2f2922]">
@@ -182,8 +265,10 @@ export function BlueprintReader({ book }: { book: BlueprintBook }) {
             <ReaderSidebar
               book={book}
               bookmarks={readerState.bookmarks}
+              classicalBook={classicalBook}
               currentSection={visibleSection}
               goTo={goTo}
+              republishPanel={republishPanel}
             />
 
             <article className="book-page mx-auto min-h-[calc(100vh-40px)] w-full max-w-3xl rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-6 py-8 shadow-[0_24px_80px_rgba(55,45,31,0.18)] sm:px-12 sm:py-12">
@@ -224,6 +309,7 @@ export function BlueprintReader({ book }: { book: BlueprintBook }) {
               {visibleSection === "notes" ? (
                 <NotesView book={book} highlights={readerState.highlights} notes={readerState.notes} />
               ) : null}
+              {visibleSection === "appendix" ? <AppendixView appendix={appendixData} /> : null}
 
               <nav className="mt-12 flex items-center justify-between border-t border-[#e7dece] pt-6 text-sm font-semibold text-[#6f6253]">
                 <button
@@ -249,9 +335,11 @@ export function BlueprintReader({ book }: { book: BlueprintBook }) {
             <ReaderPanel
               book={book}
               currentParagraphs={currentParagraphs}
+              debugData={debugData}
               highlights={readerState.highlights}
               notes={readerState.notes}
               onGoToNotes={() => goTo("notes")}
+              showNotes={!classicalBook}
             />
           </div>
         )}
@@ -362,13 +450,17 @@ function CoverView({
 function ReaderSidebar({
   book,
   bookmarks,
+  classicalBook,
   currentSection,
   goTo,
+  republishPanel,
 }: {
   book: BlueprintBook;
   bookmarks: ReaderSection[];
+  classicalBook: boolean;
   currentSection: ReaderSection;
   goTo: (section: ReaderSection) => void;
+  republishPanel?: React.ReactNode;
 }) {
   const items: Array<{ section: ReaderSection; label: string }> = [
     { section: "cover", label: "표지" },
@@ -380,13 +472,15 @@ function ReaderSidebar({
       section: getChapterSection(chapter),
       label: `${chapter.chapterNo}. ${chapter.title}`,
     })),
-    { section: "notes", label: "My Notes" },
+    ...(classicalBook ? [] : [{ section: "notes" as ReaderSection, label: "My Notes" }]),
+    { section: "appendix", label: classicalBook ? "20. Appendix" : "이 책의 근거" },
   ];
 
   return (
     <aside className="hidden rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0]/80 p-4 shadow-sm lg:block">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8a6b2e]">내 서재</p>
       <h2 className="mt-3 text-lg font-black text-[#2f2922]">{book.metadata.title}</h2>
+      {republishPanel ? <div className="mt-4">{republishPanel}</div> : null}
       <FamilyCollectionShelf book={book} compact />
       <div className="mt-5 space-y-1">
         {items.map((item) => (
@@ -521,7 +615,7 @@ function PrologueView(props: ParagraphInteractionProps & { book: BlueprintBook }
   return (
     <section>
       <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">{props.book.prologue.title}</p>
-      <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">기준이 서기 전에는 결론도 서지 않습니다.</h1>
+      <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">{props.book.prologue.title}</h1>
       <ParagraphList paragraphs={props.book.prologue.paragraphs} {...props} />
     </section>
   );
@@ -612,13 +706,29 @@ function ParagraphList({
         const noteOpen = activeNoteParagraphId === paragraph.id;
         return (
           <div className="group" key={paragraph.id}>
-            <p
-              className={`rounded-[2px] px-1 py-1 text-xl leading-[2.05] tracking-[-0.01em] transition ${
-                highlighted ? "bg-[#f7df9c]/60" : "bg-transparent"
-              }`}
-            >
-              {paragraph.text}
-            </p>
+            {paragraph.tripleLayer ? (
+              <TripleLayerBlock highlighted={highlighted} paragraph={paragraph} />
+            ) : (
+              <p
+                className={`rounded-[2px] px-1 py-1 text-xl leading-[2.05] tracking-[-0.01em] transition ${
+                  highlighted ? "bg-[#f7df9c]/60" : "bg-transparent"
+                }`}
+              >
+                {paragraph.text}
+              </p>
+            )}
+            {paragraph.referenceEvidence && !paragraph.tripleLayer ? (
+              <div className="mt-3 rounded-[2px] border border-[#d6d9de] bg-[#eef1f4] p-4 text-sm leading-6 text-[#344054]">
+                <p className="text-xs font-black tracking-[0.16em] text-[#667085]">사주 근거</p>
+                <div className="mt-3 grid gap-3">
+                  <ReferenceEvidenceRow label="사주" values={paragraph.referenceEvidence.saju} />
+                  <ReferenceEvidenceRow label="십성" values={paragraph.referenceEvidence.tenGods} />
+                  <ReferenceEvidenceRow label="오행" values={paragraph.referenceEvidence.elements} />
+                  <ReferenceEvidenceRow label="합충" values={paragraph.referenceEvidence.relations} />
+                  <ReferenceEvidenceRow label="대운" values={paragraph.referenceEvidence.luck} />
+                </div>
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
               <button
                 className="rounded-full border border-[#d8cdbb] px-3 py-1.5 text-xs font-black text-[#6f6253] hover:bg-[#f6f0e6]"
@@ -646,6 +756,86 @@ function ParagraphList({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function TripleLayerBlock({
+  highlighted,
+  paragraph,
+}: {
+  highlighted: boolean;
+  paragraph: BlueprintParagraph;
+}) {
+  if (!paragraph.tripleLayer) {
+    return null;
+  }
+
+  return (
+    <div className={`rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] p-5 ${highlighted ? "ring-2 ring-[#d9b45f]" : ""}`}>
+      <LayerPanel
+        label="Layer 1"
+        title="사주 원문"
+        tone="source"
+        values={paragraph.tripleLayer.sajuOriginal}
+      />
+      <LayerDivider />
+      <LayerPanel
+        label="Layer 2"
+        title="고전 명리학 해석"
+        tone="classical"
+        values={paragraph.tripleLayer.classical}
+      />
+      <LayerDivider />
+      <LayerPanel
+        label="Layer 3"
+        title="Blueprint Interpretation"
+        tone="blueprint"
+        values={paragraph.tripleLayer.blueprint}
+      />
+    </div>
+  );
+}
+
+function LayerDivider() {
+  return <div className="my-5 border-t border-[#cfd3d8]" />;
+}
+
+function LayerPanel({
+  label,
+  title,
+  tone,
+  values,
+}: {
+  label: string;
+  title: string;
+  tone: "source" | "classical" | "blueprint";
+  values: string[];
+}) {
+  const toneClass = {
+    source: "bg-[#eef1f4] text-[#344054]",
+    classical: "bg-[#fffdf8] text-[#3b332a]",
+    blueprint: "bg-[#f7df9c]/35 text-[#2f2922]",
+  }[tone];
+
+  return (
+    <section className={`rounded-[2px] p-4 ${toneClass}`}>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#667085]">{label}</p>
+      <h3 className="mt-1 text-base font-black">{title}</h3>
+      <div className="mt-3 space-y-2">
+        {values.map((value) => (
+          <p className="text-lg leading-8" key={value}>{value}</p>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReferenceEvidenceRow({ label, values }: { label: string; values: string[] }) {
+  return (
+    <div>
+      <span className="font-black text-[#344054]">{label}</span>
+      <span className="ml-2 text-[#667085]">{values.length ? values.join(" · ") : "아직 연결되지 않았습니다."}</span>
     </div>
   );
 }
@@ -708,18 +898,336 @@ function NotesView({
   );
 }
 
+function formatUnknown(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(formatUnknown).join(", ");
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.hangul === "string" && typeof record.hanja === "string") {
+      return `${record.hangul}(${record.hanja})`;
+    }
+    if (typeof record.ganKo === "string" && typeof record.jiKo === "string") {
+      return `${record.ganKo}${record.jiKo}`;
+    }
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+const elementLabels: Record<string, string> = {
+  wood: "목",
+  fire: "화",
+  earth: "토",
+  metal: "금",
+  water: "수",
+};
+
+const pillarLabels: Record<string, string> = {
+  year: "년주",
+  month: "월주",
+  day: "일주",
+  hour: "시주",
+};
+
+function formatAppendixKey(key: string) {
+  return pillarLabels[key] ?? elementLabels[key] ?? key;
+}
+
+function AppendixSection({
+  children,
+  label,
+  title,
+}: {
+  children: React.ReactNode;
+  label: string;
+  title: string;
+}) {
+  return (
+    <section className="border-t border-[#cfd3d8] pt-8">
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-[#6b7280]">{label}</p>
+      <h2 className="mt-2 text-2xl font-black text-[#1f2933]">{title}</h2>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function AppendixRows({
+  rows,
+}: {
+  rows: Array<{ label: string; value: React.ReactNode }>;
+}) {
+  if (rows.length === 0) {
+    return <p className="rounded-[2px] border border-dashed border-[#d6d9de] p-4 text-sm text-[#667085]">아직 연결되지 않았습니다.</p>;
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {rows.map((row) => (
+        <div className="rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] px-3 py-2 text-sm" key={row.label}>
+          <span className="font-black text-[#344054]">{row.label} </span>
+          <span className="text-[#667085]">{row.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PillarCell({ label, pillar }: { label: string; pillar: CanonicalOptionalPillar }) {
+  return (
+    <div className="rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] p-4">
+      <p className="text-xs font-black uppercase tracking-[0.16em] text-[#6b7280]">{label}</p>
+      {pillar ? (
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <dt className="text-[#667085]">간지</dt>
+          <dd className="font-black text-[#1f2933]">{pillar.label}</dd>
+          <dt className="text-[#667085]">천간</dt>
+          <dd>{pillar.ganKo} / {pillar.gan}</dd>
+          <dt className="text-[#667085]">지지</dt>
+          <dd>{pillar.jiKo} / {pillar.ji}</dd>
+          <dt className="text-[#667085]">Confidence</dt>
+          <dd>{formatPercent(pillar.confidence)}</dd>
+        </dl>
+      ) : (
+        <p className="mt-3 text-sm text-[#667085]">시주 정보가 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
+function TenGodRows({ appendix }: { appendix: BlueprintAppendix }) {
+  const rows = [
+    { label: "년주", pillar: appendix.pillars.year },
+    { label: "월주", pillar: appendix.pillars.month },
+    { label: "일주", pillar: appendix.pillars.day },
+    { label: "시주", pillar: appendix.pillars.hour },
+  ]
+    .filter(({ pillar }) => Boolean(pillar))
+    .map(({ label, pillar }) => {
+      const pillarLabel = pillar?.label ?? "-";
+      return {
+        label,
+        value: `${pillarLabel} — ${appendix.tenGods[pillarLabel] ?? "아직 연결되지 않았습니다"}`,
+      };
+    });
+
+  return <AppendixRows rows={rows} />;
+}
+
+function ElementRows({ appendix }: { appendix: BlueprintAppendix }) {
+  const rows = Object.entries(elementLabels).map(([key, label]) => ({
+    label,
+    value: appendix.elements[key] ?? 0,
+  }));
+
+  return <AppendixRows rows={rows} />;
+}
+
+function TwelveStageRows({ appendix }: { appendix: BlueprintAppendix }) {
+  const rows = Object.entries(pillarLabels).map(([key, label]) => ({
+    label,
+    value: appendix.twelveStages[key] ?? "아직 연결되지 않았습니다",
+  }));
+
+  return <AppendixRows rows={rows} />;
+}
+
+function PillarTable({ appendix }: { appendix: BlueprintAppendix }) {
+  const rows = [
+    { label: "년주", pillar: appendix.pillars.year },
+    { label: "월주", pillar: appendix.pillars.month },
+    { label: "일주", pillar: appendix.pillars.day },
+    { label: "시주", pillar: appendix.pillars.hour },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-[2px] border border-[#d6d9de] bg-[#f8fafc]">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead className="bg-[#e4e7ec] text-xs font-black uppercase tracking-[0.16em] text-[#667085]">
+          <tr>
+            <th className="px-4 py-3">구분</th>
+            <th className="px-4 py-3">간지</th>
+            <th className="px-4 py-3">한자</th>
+            <th className="px-4 py-3">Confidence</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[#d6d9de]">
+          {rows.map(({ label, pillar }) => (
+            <tr key={label}>
+              <th className="px-4 py-3 font-black text-[#344054]">{label}</th>
+              <td className="px-4 py-3 font-black text-[#1f2933]">
+                {pillar ? pillar.label : "아직 연결되지 않았습니다"}
+              </td>
+              <td className="px-4 py-3 text-[#667085]">
+                {pillar ? `${pillar.gan}${pillar.ji}` : "-"}
+              </td>
+              <td className="px-4 py-3 text-[#667085]">
+                {pillar ? formatPercent(pillar.confidence) : "-"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function KeyValueGrid({ data }: { data: Record<string, unknown> }) {
+  const entries = Object.entries(data);
+
+  if (entries.length === 0) {
+    return <p className="rounded-[2px] border border-dashed border-[#d6d9de] p-4 text-sm text-[#667085]">아직 연결되지 않았습니다.</p>;
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {entries.map(([key, value]) => (
+        <div className="rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] px-3 py-2 text-sm" key={key}>
+          <span className="font-black text-[#344054]">{formatAppendixKey(key)} </span>
+          <span className="text-[#667085]">{formatUnknown(value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AppendixView({ appendix }: { appendix: BlueprintAppendix }) {
+  const relationData = {
+    ...appendix.relations.stems,
+    ...appendix.relations.branches,
+  };
+  const classicalTrace = appendix.classicalTrace ?? [];
+
+  return (
+    <section className="-mx-2 rounded-[2px] bg-[#eef1f4] px-4 py-8 text-[#344054] sm:-mx-4 sm:px-8">
+      <p className="text-xs font-black tracking-[0.22em] text-[#6b7280]">기술 부록</p>
+      <h1 className="mt-3 text-4xl font-black text-[#1f2933]">이 책의 근거</h1>
+      <p className="mt-4 max-w-2xl text-sm leading-7 text-[#667085]">
+        이 책은 다음 구조를 바탕으로 작성되었습니다.
+      </p>
+
+      <div className="mt-10 space-y-10 text-sm leading-6">
+        <AppendixSection label="Appendix A" title="사주 원국">
+          <PillarTable appendix={appendix} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix B" title="십성">
+          <TenGodRows appendix={appendix} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix C" title="오행 분포">
+          <ElementRows appendix={appendix} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix D" title="12운성">
+          <TwelveStageRows appendix={appendix} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix E" title="지장간">
+          <KeyValueGrid data={appendix.hiddenStems} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix F" title="합 · 충 · 형 · 파 · 해">
+          <KeyValueGrid data={relationData} />
+        </AppendixSection>
+
+        <AppendixSection label="Appendix G" title="현재 운">
+          <div className="grid gap-3">
+            <div className="rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] p-4">
+              <p className="font-black text-[#1f2933]">대운</p>
+              <p className="mt-2 text-[#667085]">{appendix.luck.currentDaeun?.ganji ?? "-"}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <PillarCell label="세운" pillar={appendix.luck.currentYear} />
+              <PillarCell label="월운" pillar={appendix.luck.currentMonth} />
+            </div>
+          </div>
+        </AppendixSection>
+
+        <AppendixSection label="Appendix H" title="해석 근거">
+          <div className="space-y-5">
+            {classicalTrace.length === 0 ? (
+              <p className="rounded-[2px] border border-dashed border-[#d6d9de] p-4 text-sm text-[#667085]">아직 연결되지 않았습니다.</p>
+            ) : null}
+            {classicalTrace.map((trace) => (
+              <article className="rounded-[2px] border border-[#cfd3d8] bg-[#f8fafc] p-5" key={trace.chapterId}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-[#6b7280]">Chapter {trace.chapterNo}</p>
+                    <h3 className="mt-1 text-lg font-black text-[#1f2933]">{trace.chapterTitle}</h3>
+                  </div>
+                  <p className="rounded-full bg-[#e4e7ec] px-3 py-1 text-xs font-black text-[#344054]">
+                    {formatPercent(trace.confidence)}
+                  </p>
+                </div>
+
+                <div className="mt-5 grid gap-4">
+                  <div>
+                    <p className="font-black text-[#344054]">사주 원문</p>
+                    <ul className="mt-2 space-y-1 text-[#667085]">
+                      {trace.sajuOriginal.length ? trace.sajuOriginal.map((item) => (
+                        <li key={item}>{item}</li>
+                      )) : <li>아직 연결되지 않았습니다.</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-black text-[#344054]">고전 해석</p>
+                    <ul className="mt-2 space-y-1 text-[#667085]">
+                      {trace.classical.length ? trace.classical.map((item) => (
+                        <li key={item}>{item}</li>
+                      )) : <li>아직 연결되지 않았습니다.</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-black text-[#344054]">Blueprint 해석</p>
+                    <ul className="mt-2 space-y-1 text-[#667085]">
+                      {trace.blueprint.length ? trace.blueprint.map((item) => (
+                        <li key={item}>{item}</li>
+                      )) : <li>아직 연결되지 않았습니다.</li>}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-black text-[#344054]">근거 Source</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {trace.sources.length ? trace.sources.map((label) => (
+                        <span className="rounded-full bg-[#e4e7ec] px-3 py-1 text-xs font-bold" key={label}>
+                          {label}
+                        </span>
+                      )) : <span className="text-xs text-[#667085]">아직 연결되지 않았습니다.</span>}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </AppendixSection>
+      </div>
+    </section>
+  );
+}
+
 function ReaderPanel({
   book,
   currentParagraphs,
+  debugData,
   highlights,
   notes,
   onGoToNotes,
+  showNotes,
 }: {
   book: BlueprintBook;
   currentParagraphs: BlueprintParagraph[];
+  debugData?: BlueprintDebugData;
   highlights: string[];
   notes: Record<string, string>;
   onGoToNotes: () => void;
+  showNotes: boolean;
 }) {
   const chapterHighlightCount = currentParagraphs.filter((paragraph) => highlights.includes(paragraph.id)).length;
   const noteCount = Object.values(notes).filter((note) => note.trim().length > 0).length;
@@ -736,17 +1244,29 @@ function ReaderPanel({
           <p className="font-black text-[#2f2922]">이 장의 밑줄</p>
           <p className="mt-2">{chapterHighlightCount}개</p>
         </div>
-        <div className="rounded-[2px] bg-[#fffdf8] p-4">
-          <p className="font-black text-[#2f2922]">My Notes</p>
-          <p className="mt-2">{noteCount}개의 메모가 있습니다.</p>
-          <button className="mt-3 rounded-full bg-[#2f2922] px-4 py-2 text-xs font-black text-[#fff8ec]" onClick={onGoToNotes} type="button">
-            My Notes 열기
-          </button>
-        </div>
+        {showNotes ? (
+          <div className="rounded-[2px] bg-[#fffdf8] p-4">
+            <p className="font-black text-[#2f2922]">My Notes</p>
+            <p className="mt-2">{noteCount}개의 메모가 있습니다.</p>
+            <button className="mt-3 rounded-full bg-[#2f2922] px-4 py-2 text-xs font-black text-[#fff8ec]" onClick={onGoToNotes} type="button">
+              My Notes 열기
+            </button>
+          </div>
+        ) : null}
         <div className="rounded-[2px] bg-[#fffdf8] p-4">
           <p className="font-black text-[#2f2922]">{book.metadata.publisher}</p>
           <p className="mt-2">{book.metadata.edition} · {book.metadata.publicationDate}</p>
         </div>
+        {debugData ? (
+          <details className="rounded-[2px] bg-[#1f1a15] p-4 text-[#fff8ec]">
+            <summary className="cursor-pointer text-xs font-black uppercase tracking-[0.18em] text-[#f7df9c]">
+              Runtime Debug JSON
+            </summary>
+            <pre className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[#f8efe1]">
+              {JSON.stringify(debugData, null, 2)}
+            </pre>
+          </details>
+        ) : null}
       </div>
     </aside>
   );

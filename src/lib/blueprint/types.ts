@@ -40,6 +40,18 @@ export type BlueprintParagraph = {
   id: string;
   text: string;
   featureIds: string[];
+  tripleLayer?: {
+    sajuOriginal: string[];
+    classical: string[];
+    blueprint: string[];
+  };
+  referenceEvidence?: {
+    saju: string[];
+    tenGods: string[];
+    elements: string[];
+    relations: string[];
+    luck: string[];
+  };
 };
 
 export type BlueprintChapter = {
