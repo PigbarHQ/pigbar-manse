@@ -1,6 +1,44 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildBlueprintNo000001Runtime } from "../src/lib/blueprint";
+
+function visibleBookText(book: { chapters: Array<{ title: string; opening: string; paragraphs: Array<{ text: string }>; closing: string }> }) {
+  return book.chapters
+    .flatMap((chapter) => [
+      chapter.title,
+      chapter.opening,
+      ...chapter.paragraphs.map((paragraph) => paragraph.text),
+      chapter.closing,
+    ])
+    .join("\n");
+}
+
+function repeatedSentences(text: string) {
+  const sentences = text
+    .split(/\n+|(?<=[.?!])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 16);
+  const counts = new Map<string, number>();
+
+  sentences.forEach((sentence) => counts.set(sentence, (counts.get(sentence) ?? 0) + 1));
+
+  return Array.from(counts.entries()).filter(([, count]) => count > 1);
+}
+
+const forbiddenWriterPhrases = [
+  "고전은 이 대목에서",
+  "이 문장들은",
+  "이 말은",
+  "를 설명하기 위해",
+  "를 먼저 놓는다",
+  "를 확인한다",
+  "를 벗어나지 않는다",
+  "원고는",
+  "근거는",
+  "분석은",
+  "해석은",
+];
 
 test("Blueprint No.000001 runtime builds features, reasons, and writer input", () => {
   const runtime = buildBlueprintNo000001Runtime();
@@ -103,6 +141,267 @@ test("Writer runtime builds chapter outline, draft, edits, final text, quality, 
   assert.ok(chapter.quality.checks.every((check) => typeof check.passed === "boolean"));
   assert.ok(chapter.reasonTrace.length > 0);
   assert.ok(chapter.reasonTrace.every((trace) => trace.sajuSourcePaths.length > 0));
+});
+
+test("Writer runtime uses human-first chapter manuscript structure", () => {
+  const runtime = buildBlueprintNo000001Runtime();
+  const chapterOne = runtime.writerRuntime.chapters.find((item) => item.chapterNo === 1);
+  const chapterTwo = runtime.writerRuntime.chapters.find((item) => item.chapterNo === 2);
+
+  assert.ok(chapterOne);
+  assert.ok(chapterTwo);
+  assert.doesNotMatch(chapterOne.finalText.trim(), /^이 명조/);
+  assert.match(chapterOne.finalText.trim(), /^사람은/);
+  assert.ok(chapterOne.manuscript.humanQuestion.length > 0);
+  assert.ok(chapterOne.manuscript.sceneSymbol.length > 0);
+  assert.ok(chapterOne.manuscript.classicalEntry.length > 0);
+  assert.ok(chapterOne.manuscript.closingSentence.length > 0);
+  assert.notEqual(chapterOne.title, chapterTwo.title);
+  assert.notEqual(chapterOne.manuscript.sceneSymbol, chapterTwo.manuscript.sceneSymbol);
+  assert.match(chapterTwo.manuscript.structuralReading, /금 -> 수 -> 목/);
+  assert.doesNotMatch(chapterOne.finalText, /FEATURE_|ID\d{3}|REASON_/);
+  assert.doesNotMatch(chapterTwo.finalText, /FEATURE_|ID\d{3}|REASON_/);
+});
+
+test("Rendered user chapters expose writer manuscript, not classical layers", async () => {
+  const { buildBlueprintNo000001 } = await import("../src/lib/blueprint/no000001");
+  const { book, classicalAnalysis } = buildBlueprintNo000001();
+  const chapterOne = book.chapters.find((item) => item.chapterNo === 1);
+  const chapterTwo = book.chapters.find((item) => item.chapterNo === 2);
+  const classicalTitles = new Set(classicalAnalysis.sections.map((section) => section.title));
+  const renderedText = book.chapters
+    .flatMap((chapter) => [
+      `Chapter ${chapter.chapterNo}`,
+      chapter.title,
+      chapter.opening,
+      ...chapter.paragraphs.map((paragraph) => paragraph.text),
+      chapter.closing,
+    ])
+    .join("\n");
+
+  assert.ok(chapterOne);
+  assert.ok(chapterTwo);
+  assert.equal(book.chapters.length, 19);
+  assert.notEqual(chapterOne.title, "명조 확정");
+  assert.notEqual(chapterTwo.title, "명조 핵심 구조");
+  assert.doesNotMatch(renderedText, /Layer 1/);
+  assert.doesNotMatch(renderedText, /사주 원문/);
+  assert.doesNotMatch(renderedText, /고전 명리학 해석/);
+  assert.doesNotMatch(renderedText, /Blueprint Interpretation/);
+  assert.doesNotMatch(renderedText, /사주 근거는 각 문장 아래에 붙인다/);
+  assert.match(renderedText, /사람은 무엇으로 자신의 삶을 설명할 수 있을까/);
+  assert.match(renderedText, /년주 갑인.*월주 신미.*일주 임신.*시주 임인/);
+  assert.ok(book.chapters.every((chapter) => chapter.paragraphs.every((paragraph) => !paragraph.tripleLayer)));
+  assert.ok(book.chapters.every((chapter) => !chapter.opening.trim().startsWith("이 명조")));
+  assert.ok(book.chapters.every((chapter) => chapter.opening.length > 0));
+  assert.ok(book.chapters.every((chapter) => chapter.paragraphs.length >= 5));
+  assert.ok(book.chapters.every((chapter) => chapter.title.length <= 25));
+  assert.ok(
+    book.chapters.every((chapter, index) => {
+      const interpretation = classicalAnalysis.sections[index]?.layers.flatMap((layer) => layer.blueprint).join("\n") ?? "";
+
+      return chapter.title !== interpretation;
+    }),
+  );
+  assert.ok(book.chapters.slice(2).every((chapter) => !classicalTitles.has(chapter.title)));
+  assert.equal(new Set(book.chapters.map((chapter) => chapter.paragraphs[0]?.text)).size, book.chapters.length);
+  assert.doesNotMatch(renderedText, /고전은 이 장면을 감정의 이름으로 바꾸지 않는다/);
+  assert.doesNotMatch(renderedText, /원국의 기능은|확인될 때만 말할 수 있다/);
+  forbiddenWriterPhrases.forEach((phrase) => assert.doesNotMatch(renderedText, new RegExp(phrase)));
+  assert.ok((renderedText.match(/핵심은/g) ?? []).length <= 1);
+  assert.deepEqual(repeatedSentences(renderedText), []);
+});
+
+test("Editorial writer translates Classical Analysis chapter 3 without Feature Reason Vocabulary prose", async () => {
+  const { buildBlueprintNo000001 } = await import("../src/lib/blueprint/no000001");
+  const { book, runtime } = buildBlueprintNo000001();
+  const chapterThree = book.chapters[2];
+  const writerChapterThree = runtime.writerRuntime.chapters[2];
+  const analysisThree = runtime.writerInput.classicalAnalysis?.[2];
+  const chapterText = [
+    chapterThree.opening,
+    ...chapterThree.paragraphs.map((paragraph) => paragraph.text),
+    chapterThree.closing,
+  ].join("\n");
+  const writerText = writerChapterThree.finalText;
+
+  assert.ok(analysisThree);
+  assert.equal(analysisThree.index, 3);
+  assert.equal(analysisThree.title, "적천수 관점");
+  assert.match(chapterText, /壬水/);
+  assert.match(chapterText, /뿌리|통로|흐름|멈춤/);
+  assert.match(chapterText, /미월의 흐름/);
+  analysisThree.structure.split("\n").filter(Boolean).forEach((line) => assert.doesNotMatch(chapterText, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))));
+  analysisThree.interpretation.split("\n").filter(Boolean).forEach((line) => assert.doesNotMatch(chapterText, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))));
+  forbiddenWriterPhrases.forEach((phrase) => assert.doesNotMatch(`${chapterText}\n${writerText}`, new RegExp(phrase)));
+  assert.equal(writerChapterThree.reasonTrace.length, 0);
+  assert.ok(writerChapterThree.draft.paragraphs.every((paragraph) => paragraph.featureIds.length === 0));
+  assert.ok(writerChapterThree.draft.paragraphs.every((paragraph) => paragraph.reasonIds.length === 0));
+  assert.ok(writerChapterThree.draft.paragraphs.every((paragraph) => paragraph.vocabularyIds.length === 0));
+  assert.doesNotMatch(`${chapterText}\n${writerText}`, /FEATURE_|REASON_|ID\d{3}/);
+});
+
+test("Dynamic manse input changes pillars, chapters, core theme, and appendix", async () => {
+  const { CITY_OPTIONS } = await import("../src/lib/manse");
+  const { buildBlueprintNo000001, buildBlueprintClassicalPublication } = await import("../src/lib/blueprint/no000001");
+  const base = buildBlueprintNo000001();
+  const changed = buildBlueprintClassicalPublication({
+    manseInput: {
+      name: "테스트",
+      birthDate: "1975-11-12",
+      calendarType: "solar",
+      isLeapMonth: false,
+      birthTime: "22:00",
+      unknownTime: false,
+      gender: "male",
+      birthPlace: {
+        name: CITY_OPTIONS[1].name,
+        label: CITY_OPTIONS[1].name,
+        latitude: CITY_OPTIONS[1].latitude,
+        longitude: CITY_OPTIONS[1].longitude,
+        timezone: "Asia/Seoul",
+      },
+      useLocalMeanTime: true,
+      currentDateTime: "2026-07-02T12:30:00+09:00",
+      ziHourRule: "midnight",
+      daewoonDirectionRule: "standard",
+    },
+  });
+
+  assert.notDeepEqual(base.runtime.writerInput.sourceSummary.pillars, changed.runtime.writerInput.sourceSummary.pillars);
+  assert.notEqual(base.book.metadata.title, changed.book.metadata.title);
+  assert.notEqual(base.book.chapters[2]?.title, changed.book.chapters[2]?.title);
+  assert.notEqual(visibleBookText(base.book), visibleBookText(changed.book));
+  assert.notEqual(base.runtime.writerInput.coreSummary, changed.runtime.writerInput.coreSummary);
+  assert.notEqual(base.runtime.appendix.pillars.year.label, changed.runtime.appendix.pillars.year.label);
+  assert.match(visibleBookText(changed.book), new RegExp(changed.runtime.writerInput.sourceSummary.pillars[0]));
+});
+
+test("Book composer preserves Classical Analysis order while titles and bodies follow each manse", async () => {
+  const { CITY_OPTIONS } = await import("../src/lib/manse");
+  const { buildBlueprintNo000001, buildBlueprintClassicalPublication } = await import("../src/lib/blueprint/no000001");
+  const seoul = CITY_OPTIONS[0];
+  const manseDefaults = {
+    calendarType: "solar" as const,
+    isLeapMonth: false,
+    unknownTime: false,
+    birthPlace: {
+      name: seoul.name,
+      label: seoul.name,
+      latitude: seoul.latitude,
+      longitude: seoul.longitude,
+      timezone: "Asia/Seoul" as const,
+    },
+    useLocalMeanTime: true,
+    currentDateTime: "2026-07-02T12:30:00+09:00",
+    ziHourRule: "midnight" as const,
+    daewoonDirectionRule: "standard" as const,
+  };
+  const ju = buildBlueprintNo000001();
+  const lee = buildBlueprintClassicalPublication({
+    manseInput: {
+      ...manseDefaults,
+      name: "이진희",
+      birthDate: "1975-11-12",
+      birthTime: "22:00",
+      gender: "male",
+    },
+  });
+  const hee = buildBlueprintClassicalPublication({
+    manseInput: {
+      ...manseDefaults,
+      name: "희준",
+      birthDate: "1995-03-12",
+      birthTime: "12:00",
+      gender: "male",
+    },
+  });
+  const publications = [ju, lee, hee];
+  const coreThemes = publications.map((publication) => publication.runtime.writerInput.coreSummary.split(" · ")[0]);
+  const sceneThemes = publications.map((publication) => publication.runtime.writerInput.coreSummary.split(" · ")[1]);
+  const chapterCounts = publications.map((publication) => publication.book.chapters.length);
+  const chapterThreeTitles = publications.map((publication) => publication.book.chapters[2]?.title);
+  const chapterThreeBodies = publications.map((publication) =>
+    [
+      publication.book.chapters[2]?.opening,
+      ...(publication.book.chapters[2]?.paragraphs.map((paragraph) => paragraph.text) ?? []),
+      publication.book.chapters[2]?.closing,
+    ].join("\n"),
+  );
+
+  assert.deepEqual(coreThemes, ["흐름", "중심", "탐색"]);
+  assert.deepEqual(sceneThemes, ["장면: 물", "장면: 불", "장면: 길"]);
+  assert.deepEqual(chapterCounts, [19, 19, 19]);
+  assert.ok(publications.every((publication) => publication.runtime.writerInput.classicalAnalysis?.length === 19));
+  assert.ok(
+    publications.every((publication) =>
+      publication.runtime.writerInput.classicalAnalysis?.every(
+        (item, index) => item.index === publication.classicalAnalysis.sections[index]?.order && item.title === publication.classicalAnalysis.sections[index]?.title,
+      ),
+    ),
+  );
+  assert.equal(new Set(chapterThreeTitles).size, 3);
+  assert.equal(new Set(chapterThreeBodies).size, 3);
+  assert.notEqual(visibleBookText(ju.book), visibleBookText(lee.book));
+  assert.notEqual(visibleBookText(ju.book), visibleBookText(hee.book));
+});
+
+test("Scene composer keeps one scene theme per book while changing chapter scenes", async () => {
+  const { buildBlueprintNo000001 } = await import("../src/lib/blueprint/no000001");
+  const { book, runtime } = buildBlueprintNo000001();
+  const waterSymbols = [
+    "강",
+    "시내",
+    "호수",
+    "비",
+    "안개",
+    "바다",
+    "밀물",
+    "썰물",
+    "여울",
+    "물결",
+    "수면",
+    "물안개",
+    "포말",
+    "물살",
+    "조류",
+    "파문",
+    "샘",
+    "개울",
+    "물가",
+  ];
+  const sceneLines = book.chapters.map(
+    (chapter) =>
+      [chapter.opening, ...chapter.paragraphs.map((paragraph) => paragraph.text)].find((text) =>
+        text.includes("한 번에 보여 주지 않는다."),
+      ) ?? "",
+  );
+
+  assert.match(runtime.writerInput.coreSummary, /장면: 물/);
+  assert.equal(sceneLines.length, 19);
+  assert.equal(new Set(sceneLines).size, 19);
+  waterSymbols.forEach((symbol) => {
+    assert.ok(
+      sceneLines.some((line) => line.startsWith(`${symbol}은`) || line.startsWith(`${symbol}는`)),
+      `${symbol} scene should appear in the water scene theme`,
+    );
+  });
+  assert.doesNotMatch(sceneLines.join("\n"), /비탈|다리|항구|저울|책상|계단|등불|마루|기둥|모퉁이/);
+});
+
+test("Reader exposes dynamic input and mode boundaries", () => {
+  const readerSource = readFileSync(new URL("../src/components/blueprint/BlueprintReader.tsx", import.meta.url), "utf8");
+  const workspaceSource = readFileSync(new URL("../src/components/blueprint/BlueprintClassicalWorkspace.tsx", import.meta.url), "utf8");
+
+  assert.match(workspaceSource, /Dynamic Manse Input/);
+  assert.match(workspaceSource, /생년월일, 성별, 출생시간, 출생지/);
+  assert.match(readerSource, /useState<ReaderMode>\("book"\)/);
+  assert.match(readerSource, /Book Mode/);
+  assert.match(readerSource, /Evidence Mode/);
+  assert.match(readerSource, /Layer 1/);
+  assert.match(readerSource, /사주 원문/);
+  assert.match(readerSource, /Blueprint Interpretation/);
+  assert.match(readerSource, /evidenceMode \? <AppendixView/);
 });
 
 test("Reference Blueprint book keeps chapter structure and sentence-level saju evidence", async () => {

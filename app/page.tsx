@@ -1,25 +1,9 @@
 import { BlueprintClassicalWorkspace } from "@/src/components/blueprint/BlueprintClassicalWorkspace";
-import { buildBlueprintNo000001 } from "@/src/lib/blueprint/no000001";
+import { buildEmptyBlueprintPublication } from "@/src/lib/blueprint/emptyPublication";
+import { blueprintNo000001RuntimeInput } from "@/src/lib/blueprint/runtime";
 
 export default function Home() {
-  const { classicalAnalysis, classicalBook, manse, runtime } = buildBlueprintNo000001();
+  const initialPublication = buildEmptyBlueprintPublication(blueprintNo000001RuntimeInput);
 
-  return (
-    <BlueprintClassicalWorkspace
-      initial={{
-        appendix: runtime.appendix,
-        book: classicalBook,
-        debugData: {
-          appendix: runtime.appendix,
-          canonicalManseInput: runtime.canonicalManseInput,
-          classicalAnalysis,
-          features: runtime.features,
-          reasons: runtime.reasons,
-          writerInput: runtime.writerInput,
-          writerRuntime: runtime.writerRuntime,
-        },
-        manseInput: manse.input,
-      }}
-    />
-  );
+  return <BlueprintClassicalWorkspace initial={initialPublication} />;
 }

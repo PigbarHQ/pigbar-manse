@@ -20,9 +20,52 @@ function pillarLabels(canonical: CanonicalManseInput) {
   return labels.filter((label): label is string => Boolean(label));
 }
 
+const ganElementLabels: Record<string, string> = {
+  갑: "목",
+  을: "목",
+  병: "화",
+  정: "화",
+  무: "토",
+  기: "토",
+  경: "금",
+  신: "금",
+  임: "수",
+  계: "수",
+};
+
+const generatingCycle = ["목", "화", "토", "금", "수"] as const;
+
+function ganElementFlow(canonical: CanonicalManseInput) {
+  const stemElements = [
+    canonical.pillars.year.ganKo,
+    canonical.pillars.month.ganKo,
+    canonical.pillars.day.ganKo,
+    canonical.pillars.hour?.ganKo,
+  ]
+    .map((gan) => (gan ? ganElementLabels[gan] : null))
+    .filter((element): element is string => Boolean(element));
+  const present = new Set(stemElements);
+  const chains = generatingCycle.map((_, startIndex) => {
+    const chain: string[] = [];
+
+    for (let offset = 0; offset < generatingCycle.length; offset += 1) {
+      const element = generatingCycle[(startIndex + offset) % generatingCycle.length];
+
+      if (!present.has(element)) break;
+      chain.push(element);
+    }
+
+    return chain;
+  });
+
+  return chains.sort((a, b) => b.length - a.length)[0] ?? [];
+}
+
 function sourceSummary(canonical: CanonicalManseInput): WriterInput["sourceSummary"] {
   return {
     pillars: pillarLabels(canonical),
+    elementFlow: ganElementFlow(canonical),
+    elements: canonical.elements,
     currentDaewoon: canonical.luck.currentDaeun ? canonical.luck.currentDaeun.ganji : null,
     currentSewoon: canonical.luck.currentYear.label,
     calculationEngine: "pigbar-manse",
@@ -74,8 +117,16 @@ function annotationSeedsForReasons(reasons: BlueprintReason[], vocabulary: Human
 }
 
 function chapterTitle(axis: BlueprintAxis, index: number) {
+  if (index === 0) {
+    return "강은 자신이 바다를 향하고 있다는 사실을 모른다";
+  }
+
+  if (index === 1) {
+    return "흐름은 우연이 아니라 구조다";
+  }
+
   if (axis === "LifeFlow") {
-    return "나는 어떤 흐름 위에 있는가";
+    return "계절은 사람의 속도를 바꾼다";
   }
 
   return BLUEPRINT_AXIS_QUESTIONS[axis] || `Chapter ${index + 1}`;

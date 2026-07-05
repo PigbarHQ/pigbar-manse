@@ -2,6 +2,17 @@
 
 Next.js / TypeScript 기반 한국 만세력 계산 실험 프로젝트입니다.
 
+## 개발 환경
+
+1. 프로젝트 루트에 `.env.local` 파일을 생성합니다.
+2. `.env.local`에 `OPENAI_API_KEY`를 추가합니다.
+3. 개발 서버를 실행합니다.
+
+```bash
+OPENAI_API_KEY=sk-proj-...
+npm run dev
+```
+
 ## 계산 원칙
 
 - 명조 계산 1차 엔진: `@fullstackfamily/manseryeok`

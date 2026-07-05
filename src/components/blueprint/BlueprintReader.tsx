@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BlueprintBook, BlueprintChapter, BlueprintParagraph } from "@/src/lib/blueprint/types";
 import type { BlueprintAppendix, CanonicalOptionalPillar } from "@/src/lib/blueprint/types/runtime";
+import type { ManuscriptSource } from "@/src/lib/blueprint/emptyPublication";
 
 type BlueprintDebugData = {
   canonicalManseInput: unknown;
@@ -16,6 +17,8 @@ type BlueprintDebugData = {
 
 type ReaderSection =
   | "cover"
+  | "portrait"
+  | "finalCounsel"
   | "dedication"
   | "author"
   | "prologue"
@@ -23,6 +26,8 @@ type ReaderSection =
   | `chapter-${number}`
   | "notes"
   | "appendix";
+
+type ReaderMode = "book" | "evidence";
 
 type SavedReaderState = {
   published: boolean;
@@ -36,6 +41,8 @@ const storageKey = "pigbar-blueprint-no-000001";
 
 const sectionLabels: Record<string, string> = {
   cover: "표지",
+  portrait: "Portrait Book",
+  finalCounsel: "Final Counsel",
   dedication: "헌사",
   author: "저자",
   prologue: "프롤로그",
@@ -43,10 +50,6 @@ const sectionLabels: Record<string, string> = {
   notes: "My Notes",
   appendix: "이 책의 근거",
 };
-
-function isClassicalBook(book: BlueprintBook) {
-  return book.metadata.sourceName === "Pigbar Manse Classical Mode";
-}
 
 const defaultState: SavedReaderState = {
   published: false,
@@ -87,6 +90,14 @@ function getChapterSection(chapter: BlueprintChapter): ReaderSection {
 }
 
 function getSectionTitle(book: BlueprintBook, section: ReaderSection) {
+  if (section === "portrait") {
+    return book.portrait?.title ?? "Portrait Book";
+  }
+
+  if (section === "finalCounsel") {
+    return "Final Counsel";
+  }
+
   if (section.startsWith("chapter-")) {
     const chapterNo = Number(section.replace("chapter-", ""));
     return book.chapters.find((chapter) => chapter.chapterNo === chapterNo)?.title ?? "Chapter";
@@ -96,6 +107,10 @@ function getSectionTitle(book: BlueprintBook, section: ReaderSection) {
 }
 
 function getParagraphsForSection(book: BlueprintBook, section: ReaderSection): BlueprintParagraph[] {
+  if (section === "portrait" && book.portrait) {
+    return portraitParagraphs(book);
+  }
+
   if (section === "prologue") {
     return book.prologue.paragraphs;
   }
@@ -106,6 +121,50 @@ function getParagraphsForSection(book: BlueprintBook, section: ReaderSection): B
   }
 
   return [];
+}
+
+function portraitParagraphs(book: BlueprintBook): BlueprintParagraph[] {
+  const portrait = book.portrait;
+
+  if (!portrait) {
+    return [];
+  }
+
+  return portrait.pages
+    .filter((page) => page.content.trim().length > 0)
+    .map((page) => ({
+      id: `portrait-p${page.pageNo}`,
+      text: page.content,
+      featureIds: [],
+    }));
+}
+
+function hasPrologueContent(book: BlueprintBook) {
+  return book.prologue.paragraphs.length > 0;
+}
+
+function resolveManuscriptSource(book: BlueprintBook, source?: ManuscriptSource): ManuscriptSource {
+  if (source) {
+    return source;
+  }
+
+  if ((!book.portrait && book.chapters.length === 0) || book.metadata.sourceName === "Empty") {
+    return "Empty";
+  }
+
+  return book.metadata.sourceName === "Pigbar GPT Writer" ? "GPT" : "Legacy";
+}
+
+function sourceBadgeClassName(source: ManuscriptSource) {
+  if (source === "GPT") {
+    return "border-[#267a46] bg-[#eaf7ee] text-[#1f5f38]";
+  }
+
+  if (source === "Legacy") {
+    return "border-[#a15c1a] bg-[#fff4e5] text-[#8a4b12]";
+  }
+
+  return "border-[#98a2b3] bg-[#f2f4f7] text-[#475467]";
 }
 
 function readSavedState(): SavedReaderState {
@@ -125,11 +184,13 @@ export function BlueprintReader({
   appendix,
   book,
   debugData,
+  manuscriptSource,
   republishPanel,
 }: {
   appendix?: BlueprintAppendix;
   book: BlueprintBook;
   debugData?: BlueprintDebugData;
+  manuscriptSource?: ManuscriptSource;
   republishPanel?: React.ReactNode;
 }) {
   const [readerState, setReaderState] = useState<SavedReaderState>(defaultState);
@@ -138,22 +199,28 @@ export function BlueprintReader({
   const [isPublishing, setIsPublishing] = useState(false);
   const [showShelfNotice, setShowShelfNotice] = useState(false);
   const [activeNoteParagraphId, setActiveNoteParagraphId] = useState<string | null>(null);
-  const classicalBook = isClassicalBook(book);
+  const [readerMode, setReaderMode] = useState<ReaderMode>("book");
+  const evidenceMode = readerMode === "evidence";
+  const resolvedManuscriptSource = resolveManuscriptSource(book, manuscriptSource);
+  const isEmptyBookMode = !evidenceMode && resolvedManuscriptSource === "Empty";
+  const hasPrologue = hasPrologueContent(book);
+  const hasPortrait = Boolean(book.portrait);
 
   const readingOrder = useMemo<ReaderSection[]>(
     () => {
-      const baseOrder: ReaderSection[] = [
-        "cover",
-        "dedication",
-        "author",
-        "prologue",
-        "toc",
-        ...book.chapters.map(getChapterSection),
-      ];
+      const baseOrder: ReaderSection[] = hasPortrait
+        ? ["cover", "portrait", "finalCounsel"]
+        : [
+            "cover",
+            "dedication",
+            "author",
+            ...(hasPrologue ? ["prologue" as ReaderSection] : []),
+            ...book.chapters.map(getChapterSection),
+          ];
 
-      return classicalBook ? [...baseOrder, "appendix"] : [...baseOrder, "notes", "appendix"];
+      return evidenceMode ? [...baseOrder, "appendix"] : baseOrder;
     },
-    [book.chapters, classicalBook],
+    [book.chapters, evidenceMode, hasPortrait, hasPrologue],
   );
 
   const currentIndex = readingOrder.indexOf(visibleSection);
@@ -181,6 +248,13 @@ export function BlueprintReader({
 
   function updateReaderState(updater: (state: SavedReaderState) => SavedReaderState) {
     setReaderState((state) => updater(state));
+  }
+
+  function changeReaderMode(mode: ReaderMode) {
+    setReaderMode(mode);
+    if (mode === "book" && (visibleSection === "appendix" || visibleSection === "toc" || visibleSection === "notes")) {
+      setVisibleSection(hasPortrait ? "portrait" : "dedication");
+    }
   }
 
   function goTo(section: ReaderSection) {
@@ -241,8 +315,11 @@ export function BlueprintReader({
   }
 
   const resumeSection =
-    readerState.currentSection === "cover" || (classicalBook && readerState.currentSection === "notes")
-      ? "dedication"
+    readerState.currentSection === "cover" ||
+    (hasPortrait && !readingOrder.includes(readerState.currentSection)) ||
+    (!hasPrologue && readerState.currentSection === "prologue") ||
+    (!evidenceMode && ["toc", "notes", "appendix"].includes(readerState.currentSection))
+      ? hasPortrait ? "portrait" : "dedication"
       : readerState.currentSection;
   const isBookmarked = readerState.bookmarks.includes(visibleSection);
   const appendixData = appendix ?? emptyAppendix;
@@ -255,7 +332,8 @@ export function BlueprintReader({
             book={book}
             isPublished={readerState.published}
             isPublishing={isPublishing}
-            onContinue={() => goTo("dedication")}
+            manuscriptSource={resolvedManuscriptSource}
+            onContinue={() => goTo(hasPortrait ? "portrait" : "dedication")}
             onPublish={publishBook}
             onResume={() => goTo(resumeSection)}
             showShelfNotice={showShelfNotice}
@@ -265,25 +343,44 @@ export function BlueprintReader({
             <ReaderSidebar
               book={book}
               bookmarks={readerState.bookmarks}
-              classicalBook={classicalBook}
               currentSection={visibleSection}
+              evidenceMode={evidenceMode}
               goTo={goTo}
+              hasPrologue={hasPrologue}
+              manuscriptSource={resolvedManuscriptSource}
               republishPanel={republishPanel}
             />
 
             <article className="book-page mx-auto min-h-[calc(100vh-40px)] w-full max-w-3xl rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-6 py-8 shadow-[0_24px_80px_rgba(55,45,31,0.18)] sm:px-12 sm:py-12">
               <ReaderTopBar
                 isBookmarked={isBookmarked}
+                mode={readerMode}
                 onBackToCover={() => goTo("cover")}
                 onBookmark={() => toggleBookmark(visibleSection)}
+                onModeChange={changeReaderMode}
                 sectionTitle={currentTitle}
               />
 
-              {visibleSection === "dedication" ? (
+              {isEmptyBookMode ? <EmptyBookModeView /> : null}
+              {!isEmptyBookMode && visibleSection === "portrait" && book.portrait ? (
+                <PortraitView
+                  activeNoteParagraphId={activeNoteParagraphId}
+                  book={book}
+                  highlights={readerState.highlights}
+                  notes={readerState.notes}
+                  onNoteChange={updateNote}
+                  onOpenNote={setActiveNoteParagraphId}
+                  onToggleHighlight={toggleHighlight}
+                />
+              ) : null}
+              {!isEmptyBookMode && visibleSection === "finalCounsel" && book.portrait ? (
+                <FinalCounselView book={book} />
+              ) : null}
+              {!isEmptyBookMode && visibleSection === "dedication" ? (
                 <DedicationView book={book} />
               ) : null}
-              {visibleSection === "author" ? <AuthorView book={book} /> : null}
-              {visibleSection === "prologue" ? (
+              {!isEmptyBookMode && visibleSection === "author" ? <AuthorView book={book} /> : null}
+              {!isEmptyBookMode && visibleSection === "prologue" ? (
                 <PrologueView
                   activeNoteParagraphId={activeNoteParagraphId}
                   book={book}
@@ -294,11 +391,13 @@ export function BlueprintReader({
                   onToggleHighlight={toggleHighlight}
                 />
               ) : null}
-              {visibleSection === "toc" ? <TableOfContents book={book} goTo={goTo} /> : null}
-              {visibleSection.startsWith("chapter-") ? (
+              {!isEmptyBookMode && visibleSection === "toc" ? <TableOfContents book={book} goTo={goTo} /> : null}
+              {!isEmptyBookMode && visibleSection.startsWith("chapter-") ? (
                 <ChapterView
                   activeNoteParagraphId={activeNoteParagraphId}
+                  appendix={appendixData}
                   chapter={book.chapters.find((chapter) => getChapterSection(chapter) === visibleSection)}
+                  evidenceMode={evidenceMode}
                   highlights={readerState.highlights}
                   notes={readerState.notes}
                   onNoteChange={updateNote}
@@ -306,10 +405,10 @@ export function BlueprintReader({
                   onToggleHighlight={toggleHighlight}
                 />
               ) : null}
-              {visibleSection === "notes" ? (
+              {!isEmptyBookMode && visibleSection === "notes" ? (
                 <NotesView book={book} highlights={readerState.highlights} notes={readerState.notes} />
               ) : null}
-              {visibleSection === "appendix" ? <AppendixView appendix={appendixData} /> : null}
+              {visibleSection === "appendix" && evidenceMode ? <AppendixView appendix={appendixData} /> : null}
 
               <nav className="mt-12 flex items-center justify-between border-t border-[#e7dece] pt-6 text-sm font-semibold text-[#6f6253]">
                 <button
@@ -336,10 +435,12 @@ export function BlueprintReader({
               book={book}
               currentParagraphs={currentParagraphs}
               debugData={debugData}
+              evidenceMode={evidenceMode}
               highlights={readerState.highlights}
+              manuscriptSource={resolvedManuscriptSource}
               notes={readerState.notes}
               onGoToNotes={() => goTo("notes")}
-              showNotes={!classicalBook}
+              showNotes={false}
             />
           </div>
         )}
@@ -352,6 +453,7 @@ function CoverView({
   book,
   isPublished,
   isPublishing,
+  manuscriptSource,
   onContinue,
   onPublish,
   onResume,
@@ -360,6 +462,7 @@ function CoverView({
   book: BlueprintBook;
   isPublished: boolean;
   isPublishing: boolean;
+  manuscriptSource: ManuscriptSource;
   onContinue: () => void;
   onPublish: () => void;
   onResume: () => void;
@@ -391,12 +494,19 @@ function CoverView({
         </div>
 
         <div className="mx-auto max-w-md text-center lg:text-left">
-          <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#8a6b2e]">Blueprint No.000001</p>
+          <div className="flex flex-wrap items-center justify-center gap-2 lg:justify-start">
+            <p className="text-sm font-bold uppercase tracking-[0.24em] text-[#8a6b2e]">Blueprint No.000001</p>
+            <span className={`rounded-full border px-3 py-1 text-xs font-black ${sourceBadgeClassName(manuscriptSource)}`}>
+              Source: {manuscriptSource}
+            </span>
+          </div>
           <h2 className="mt-5 text-3xl font-black leading-tight text-[#2f2922] sm:text-4xl">
             한 사람을 한 권의 책으로 출판합니다.
           </h2>
           <p className="mt-5 text-base leading-8 text-[#6a5d4e]">
-            첫 화면은 표지입니다. 이 책은 주영지의 구조를 빠르게 소비하지 않고, 처음부터 끝까지 읽을 수 있도록 출판됩니다.
+            {manuscriptSource === "Empty"
+              ? "아직 GPT Writer 원고가 생성되지 않았습니다. 입력값을 확인한 뒤 Blueprint Book을 생성하세요."
+              : "첫 화면은 표지입니다. 이 책은 GPT Writer 원고를 기준으로 처음부터 끝까지 읽을 수 있도록 출판됩니다."}
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row lg:justify-start">
@@ -450,36 +560,49 @@ function CoverView({
 function ReaderSidebar({
   book,
   bookmarks,
-  classicalBook,
   currentSection,
+  evidenceMode,
   goTo,
+  hasPrologue,
+  manuscriptSource,
   republishPanel,
 }: {
   book: BlueprintBook;
   bookmarks: ReaderSection[];
-  classicalBook: boolean;
   currentSection: ReaderSection;
+  evidenceMode: boolean;
   goTo: (section: ReaderSection) => void;
+  hasPrologue: boolean;
+  manuscriptSource: ManuscriptSource;
   republishPanel?: React.ReactNode;
 }) {
   const items: Array<{ section: ReaderSection; label: string }> = [
     { section: "cover", label: "표지" },
-    { section: "dedication", label: "헌사" },
-    { section: "author", label: "저자" },
-    { section: "prologue", label: "프롤로그" },
-    { section: "toc", label: "목차" },
-    ...book.chapters.map((chapter) => ({
-      section: getChapterSection(chapter),
-      label: `${chapter.chapterNo}. ${chapter.title}`,
-    })),
-    ...(classicalBook ? [] : [{ section: "notes" as ReaderSection, label: "My Notes" }]),
-    { section: "appendix", label: classicalBook ? "20. Appendix" : "이 책의 근거" },
+    ...(book.portrait
+      ? [
+          { section: "portrait" as ReaderSection, label: book.portrait.title },
+          { section: "finalCounsel" as ReaderSection, label: "Final Counsel" },
+        ]
+      : [
+          { section: "dedication" as ReaderSection, label: "헌사" },
+          { section: "author" as ReaderSection, label: "저자" },
+          ...(hasPrologue ? [{ section: "prologue" as ReaderSection, label: "프롤로그" }] : []),
+          ...(evidenceMode ? [{ section: "toc" as ReaderSection, label: "목차" }] : []),
+          ...book.chapters.map((chapter) => ({
+            section: getChapterSection(chapter),
+            label: `${chapter.chapterNo}. ${chapter.title}`,
+          })),
+        ]),
+    ...(evidenceMode ? [{ section: "appendix" as ReaderSection, label: "Evidence Appendix" }] : []),
   ];
 
   return (
     <aside className="hidden rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0]/80 p-4 shadow-sm lg:block">
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8a6b2e]">내 서재</p>
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8a6b2e]">{evidenceMode ? "Evidence" : "Book Mode"}</p>
       <h2 className="mt-3 text-lg font-black text-[#2f2922]">{book.metadata.title}</h2>
+      <p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-black ${sourceBadgeClassName(manuscriptSource)}`}>
+        Source: {manuscriptSource}
+      </p>
       {republishPanel ? <div className="mt-4">{republishPanel}</div> : null}
       <FamilyCollectionShelf book={book} compact />
       <div className="mt-5 space-y-1">
@@ -543,15 +666,45 @@ function FamilyCollectionShelf({ book, compact }: { book: BlueprintBook; compact
   );
 }
 
+function EmptyBookModeView() {
+  return (
+    <section className="rounded-[2px] border border-dashed border-[#d8cdbb] bg-[#fffaf0] p-8">
+      <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Book Mode</p>
+      <h1 className="mt-4 text-3xl font-black leading-tight text-[#2f2922]">GPT Blueprint 생성 필요</h1>
+      <p className="mt-5 text-base leading-8 text-[#6a5d4e]">
+        Book Mode는 /api/blueprint가 반환한 GPT Writer 원고만 표시합니다. 아직 생성된 GPT 원고가 없어서 레거시 본문을 대신 보여주지 않습니다.
+      </p>
+      <button
+        className="mt-6 rounded-[2px] bg-[#2f2922] px-5 py-3 text-left text-sm font-black text-[#fff8ec]"
+        type="button"
+      >
+        GPT Blueprint 생성에 OPENAI_API_KEY가 필요합니다.
+      </button>
+      <div className="mt-6 rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] p-5 text-sm leading-7 text-[#6f6253]">
+        <p className="font-black text-[#2f2922]">.env.local 생성 방법</p>
+        <ol className="mt-3 list-decimal space-y-2 pl-5">
+          <li>프로젝트 루트에 .env.local 파일을 만듭니다.</li>
+          <li>OPENAI_API_KEY=sk-proj-... 형식으로 키를 추가합니다.</li>
+          <li>개발 서버를 다시 시작합니다.</li>
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 function ReaderTopBar({
   isBookmarked,
+  mode,
   onBackToCover,
   onBookmark,
+  onModeChange,
   sectionTitle,
 }: {
   isBookmarked: boolean;
+  mode: ReaderMode;
   onBackToCover: () => void;
   onBookmark: () => void;
+  onModeChange: (mode: ReaderMode) => void;
   sectionTitle: string;
 }) {
   return (
@@ -559,6 +712,22 @@ function ReaderTopBar({
       <button className="text-sm font-black text-[#6f6253] hover:text-[#2f2922]" onClick={onBackToCover} type="button">
         표지로
       </button>
+      <div className="flex rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0] p-1 text-xs font-black text-[#6f6253]">
+        <button
+          className={`rounded-[2px] px-3 py-1.5 ${mode === "book" ? "bg-[#2f2922] text-[#fff8ec]" : "hover:bg-[#f1e7d7]"}`}
+          onClick={() => onModeChange("book")}
+          type="button"
+        >
+          Book Mode
+        </button>
+        <button
+          className={`rounded-[2px] px-3 py-1.5 ${mode === "evidence" ? "bg-[#2f2922] text-[#fff8ec]" : "hover:bg-[#f1e7d7]"}`}
+          onClick={() => onModeChange("evidence")}
+          type="button"
+        >
+          Evidence Mode
+        </button>
+      </div>
       <p className="text-sm font-bold text-[#8a7b69]">{sectionTitle}</p>
       <button
         className={`rounded-full border px-4 py-2 text-sm font-black transition ${
@@ -621,6 +790,54 @@ function PrologueView(props: ParagraphInteractionProps & { book: BlueprintBook }
   );
 }
 
+function PortraitView(props: ParagraphInteractionProps & { book: BlueprintBook }) {
+  const portrait = props.book.portrait;
+
+  if (!portrait) {
+    return null;
+  }
+
+  return (
+    <section>
+      <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Portrait Book</p>
+      <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">{portrait.title}</h1>
+      <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-[#8a7b69]">
+        Lens: {portrait.narrativeLens}
+      </p>
+      <div className="mt-10 space-y-8">
+        {portrait.pages.map((page) => (
+          <article
+            className="rounded-[4px] border border-[#e1d7c8] bg-[#fffaf0] px-6 py-7 shadow-[0_16px_42px_rgba(61,50,35,0.08)] sm:px-8 sm:py-9"
+            key={page.pageNo}
+          >
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#8a6b2e]">Page {page.pageNo}</p>
+            <h2 className="mt-3 text-2xl font-black leading-tight text-[#2f2922]">{page.title}</h2>
+            <p className="mt-6 whitespace-pre-line font-serif text-xl leading-[1.85] text-[#4f4539]">
+              {page.content}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FinalCounselView({ book }: { book: BlueprintBook }) {
+  if (!book.portrait) {
+    return null;
+  }
+
+  return (
+    <section>
+      <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Final Counsel</p>
+      <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">마지막 당부</h1>
+      <p className="mt-10 border-l-4 border-[#d9b45f] pl-5 font-serif text-3xl leading-[1.7] text-[#4f4539]">
+        {book.portrait.finalCounsel}
+      </p>
+    </section>
+  );
+}
+
 function TableOfContents({ book, goTo }: { book: BlueprintBook; goTo: (section: ReaderSection) => void }) {
   return (
     <section>
@@ -657,22 +874,30 @@ type ParagraphInteractionProps = {
 
 function ChapterView({
   activeNoteParagraphId,
+  appendix,
   chapter,
+  evidenceMode,
   highlights,
   notes,
   onNoteChange,
   onOpenNote,
   onToggleHighlight,
-}: ParagraphInteractionProps & { chapter?: BlueprintChapter }) {
+}: ParagraphInteractionProps & { appendix: BlueprintAppendix; chapter?: BlueprintChapter; evidenceMode: boolean }) {
   if (!chapter) {
     return null;
+  }
+
+  if (evidenceMode) {
+    return <EvidenceChapterView appendix={appendix} chapter={chapter} />;
   }
 
   return (
     <section>
       <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Chapter {chapter.chapterNo}</p>
       <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">{chapter.title}</h1>
-      <p className="mt-4 text-lg font-semibold leading-8 text-[#8a7b69]">{chapter.question}</p>
+      {chapter.question ? (
+        <p className="mt-4 text-lg font-semibold leading-8 text-[#8a7b69]">{chapter.question}</p>
+      ) : null}
       <p className="mt-10 border-l-4 border-[#d9b45f] pl-5 font-serif text-2xl leading-[1.7] text-[#4f4539]">
         {chapter.opening}
       </p>
@@ -684,8 +909,51 @@ function ChapterView({
         onOpenNote={onOpenNote}
         onToggleHighlight={onToggleHighlight}
         paragraphs={chapter.paragraphs}
+        showInteractions={false}
       />
       <p className="mt-12 font-serif text-2xl leading-[1.7] text-[#4f4539]">{chapter.closing}</p>
+    </section>
+  );
+}
+
+function EvidenceChapterView({ appendix, chapter }: { appendix: BlueprintAppendix; chapter: BlueprintChapter }) {
+  const trace = appendix.classicalTrace?.find((item) => item.chapterNo === chapter.chapterNo);
+
+  if (!trace) {
+    return (
+      <section>
+        <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Chapter {chapter.chapterNo}</p>
+        <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">{chapter.title}</h1>
+        <p className="mt-8 rounded-[2px] border border-dashed border-[#d8cdbb] p-5 text-[#8a7b69]">
+          Evidence Mode에서 확인할 근거가 아직 연결되지 않았습니다.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <p className="text-sm font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Evidence Mode</p>
+      <h1 className="mt-4 text-4xl font-black leading-tight text-[#2f2922]">{trace.chapterTitle}</h1>
+      <div className="mt-10 space-y-5">
+        <EvidenceLayer label="Layer 1" title="사주 원문" values={trace.sajuOriginal} />
+        <EvidenceLayer label="Layer 2" title="고전 명리학 해석" values={trace.classical} />
+        <EvidenceLayer label="Layer 3" title="Blueprint Interpretation" values={trace.blueprint} />
+      </div>
+    </section>
+  );
+}
+
+function EvidenceLayer({ label, title, values }: { label: string; title: string; values: string[] }) {
+  return (
+    <section className="rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] p-5 text-[#344054]">
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#667085]">{label}</p>
+      <h2 className="mt-1 text-lg font-black text-[#1f2933]">{title}</h2>
+      <div className="mt-4 space-y-2">
+        {values.length ? values.map((value) => (
+          <p className="text-base leading-7" key={value}>{value}</p>
+        )) : <p className="text-sm text-[#667085]">아직 연결되지 않았습니다.</p>}
+      </div>
     </section>
   );
 }
@@ -698,7 +966,8 @@ function ParagraphList({
   onOpenNote,
   onToggleHighlight,
   paragraphs,
-}: ParagraphInteractionProps & { paragraphs: BlueprintParagraph[] }) {
+  showInteractions = true,
+}: ParagraphInteractionProps & { paragraphs: BlueprintParagraph[]; showInteractions?: boolean }) {
   return (
     <div className="mt-10 space-y-8">
       {paragraphs.map((paragraph) => {
@@ -706,136 +975,44 @@ function ParagraphList({
         const noteOpen = activeNoteParagraphId === paragraph.id;
         return (
           <div className="group" key={paragraph.id}>
-            {paragraph.tripleLayer ? (
-              <TripleLayerBlock highlighted={highlighted} paragraph={paragraph} />
-            ) : (
-              <p
-                className={`rounded-[2px] px-1 py-1 text-xl leading-[2.05] tracking-[-0.01em] transition ${
-                  highlighted ? "bg-[#f7df9c]/60" : "bg-transparent"
-                }`}
-              >
-                {paragraph.text}
-              </p>
-            )}
-            {paragraph.referenceEvidence && !paragraph.tripleLayer ? (
-              <div className="mt-3 rounded-[2px] border border-[#d6d9de] bg-[#eef1f4] p-4 text-sm leading-6 text-[#344054]">
-                <p className="text-xs font-black tracking-[0.16em] text-[#667085]">사주 근거</p>
-                <div className="mt-3 grid gap-3">
-                  <ReferenceEvidenceRow label="사주" values={paragraph.referenceEvidence.saju} />
-                  <ReferenceEvidenceRow label="십성" values={paragraph.referenceEvidence.tenGods} />
-                  <ReferenceEvidenceRow label="오행" values={paragraph.referenceEvidence.elements} />
-                  <ReferenceEvidenceRow label="합충" values={paragraph.referenceEvidence.relations} />
-                  <ReferenceEvidenceRow label="대운" values={paragraph.referenceEvidence.luck} />
+            <p
+              className={`rounded-[2px] px-1 py-1 text-xl leading-[2.05] transition ${
+                highlighted && showInteractions ? "bg-[#f7df9c]/60" : "bg-transparent"
+              }`}
+            >
+              {paragraph.text}
+            </p>
+            {showInteractions ? (
+              <>
+                <div className="mt-3 flex flex-wrap gap-2 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                  <button
+                    className="rounded-full border border-[#d8cdbb] px-3 py-1.5 text-xs font-black text-[#6f6253] hover:bg-[#f6f0e6]"
+                    onClick={() => onToggleHighlight(paragraph.id)}
+                    type="button"
+                  >
+                    밑줄
+                  </button>
+                  <button
+                    className="rounded-full border border-[#d8cdbb] px-3 py-1.5 text-xs font-black text-[#6f6253] hover:bg-[#f6f0e6]"
+                    onClick={() => onOpenNote(noteOpen ? null : paragraph.id)}
+                    type="button"
+                  >
+                    메모
+                  </button>
                 </div>
-              </div>
-            ) : null}
-            <div className="mt-3 flex flex-wrap gap-2 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
-              <button
-                className="rounded-full border border-[#d8cdbb] px-3 py-1.5 text-xs font-black text-[#6f6253] hover:bg-[#f6f0e6]"
-                onClick={() => onToggleHighlight(paragraph.id)}
-                type="button"
-              >
-                밑줄
-              </button>
-              <button
-                className="rounded-full border border-[#d8cdbb] px-3 py-1.5 text-xs font-black text-[#6f6253] hover:bg-[#f6f0e6]"
-                onClick={() => onOpenNote(noteOpen ? null : paragraph.id)}
-                type="button"
-              >
-                메모
-              </button>
-            </div>
-            {noteOpen ? (
-              <textarea
-                className="mt-3 min-h-24 w-full rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0] p-3 text-sm leading-6 text-[#3b332a] outline-none focus:border-[#8a6b2e]"
-                onChange={(event) => onNoteChange(paragraph.id, event.target.value)}
-                placeholder="이 문장 옆에 남길 생각을 적어두세요."
-                value={notes[paragraph.id] ?? ""}
-              />
+                {noteOpen ? (
+                  <textarea
+                    className="mt-3 min-h-24 w-full rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0] p-3 text-sm leading-6 text-[#3b332a] outline-none focus:border-[#8a6b2e]"
+                    onChange={(event) => onNoteChange(paragraph.id, event.target.value)}
+                    placeholder="이 문장 옆에 남길 생각을 적어두세요."
+                    value={notes[paragraph.id] ?? ""}
+                  />
+                ) : null}
+              </>
             ) : null}
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function TripleLayerBlock({
-  highlighted,
-  paragraph,
-}: {
-  highlighted: boolean;
-  paragraph: BlueprintParagraph;
-}) {
-  if (!paragraph.tripleLayer) {
-    return null;
-  }
-
-  return (
-    <div className={`rounded-[2px] border border-[#d6d9de] bg-[#f8fafc] p-5 ${highlighted ? "ring-2 ring-[#d9b45f]" : ""}`}>
-      <LayerPanel
-        label="Layer 1"
-        title="사주 원문"
-        tone="source"
-        values={paragraph.tripleLayer.sajuOriginal}
-      />
-      <LayerDivider />
-      <LayerPanel
-        label="Layer 2"
-        title="고전 명리학 해석"
-        tone="classical"
-        values={paragraph.tripleLayer.classical}
-      />
-      <LayerDivider />
-      <LayerPanel
-        label="Layer 3"
-        title="Blueprint Interpretation"
-        tone="blueprint"
-        values={paragraph.tripleLayer.blueprint}
-      />
-    </div>
-  );
-}
-
-function LayerDivider() {
-  return <div className="my-5 border-t border-[#cfd3d8]" />;
-}
-
-function LayerPanel({
-  label,
-  title,
-  tone,
-  values,
-}: {
-  label: string;
-  title: string;
-  tone: "source" | "classical" | "blueprint";
-  values: string[];
-}) {
-  const toneClass = {
-    source: "bg-[#eef1f4] text-[#344054]",
-    classical: "bg-[#fffdf8] text-[#3b332a]",
-    blueprint: "bg-[#f7df9c]/35 text-[#2f2922]",
-  }[tone];
-
-  return (
-    <section className={`rounded-[2px] p-4 ${toneClass}`}>
-      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#667085]">{label}</p>
-      <h3 className="mt-1 text-base font-black">{title}</h3>
-      <div className="mt-3 space-y-2">
-        {values.map((value) => (
-          <p className="text-lg leading-8" key={value}>{value}</p>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ReferenceEvidenceRow({ label, values }: { label: string; values: string[] }) {
-  return (
-    <div>
-      <span className="font-black text-[#344054]">{label}</span>
-      <span className="ml-2 text-[#667085]">{values.length ? values.join(" · ") : "아직 연결되지 않았습니다."}</span>
     </div>
   );
 }
@@ -851,6 +1028,7 @@ function NotesView({
 }) {
   const allParagraphs = [
     ...book.prologue.paragraphs,
+    ...portraitParagraphs(book),
     ...book.chapters.flatMap((chapter) => chapter.paragraphs),
   ];
   const savedNotes = Object.entries(notes).filter(([, value]) => value.trim().length > 0);
@@ -1216,7 +1394,9 @@ function ReaderPanel({
   book,
   currentParagraphs,
   debugData,
+  evidenceMode,
   highlights,
+  manuscriptSource,
   notes,
   onGoToNotes,
   showNotes,
@@ -1224,21 +1404,34 @@ function ReaderPanel({
   book: BlueprintBook;
   currentParagraphs: BlueprintParagraph[];
   debugData?: BlueprintDebugData;
+  evidenceMode: boolean;
   highlights: string[];
+  manuscriptSource: ManuscriptSource;
   notes: Record<string, string>;
   onGoToNotes: () => void;
   showNotes: boolean;
 }) {
   const chapterHighlightCount = currentParagraphs.filter((paragraph) => highlights.includes(paragraph.id)).length;
   const noteCount = Object.values(notes).filter((note) => note.trim().length > 0).length;
+  const debugDataForReader = debugData
+    ? {
+        ...debugData,
+        writerRuntime: debugData.writerRuntime ? "writer runtime is available in development data" : undefined,
+      }
+    : null;
 
   return (
     <aside className="hidden rounded-[2px] border border-[#d8cdbb] bg-[#fffaf0]/80 p-4 shadow-sm lg:block">
       <p className="text-xs font-black uppercase tracking-[0.22em] text-[#8a6b2e]">Reader</p>
       <div className="mt-5 space-y-4 text-sm leading-6 text-[#6f6253]">
         <div className="rounded-[2px] bg-[#fffdf8] p-4">
-          <p className="font-black text-[#2f2922]">이어읽기</p>
-          <p className="mt-2">읽던 장은 자동으로 내 서재에 보관됩니다.</p>
+          <p className="font-black text-[#2f2922]">{evidenceMode ? "Evidence Mode" : "Book Mode"}</p>
+          <p className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-black ${sourceBadgeClassName(manuscriptSource)}`}>
+            Source: {manuscriptSource}
+          </p>
+          <p className="mt-2">
+            {evidenceMode ? "Layer와 Appendix 근거를 확인합니다." : "본문 원고만 이어서 읽습니다."}
+          </p>
         </div>
         <div className="rounded-[2px] bg-[#fffdf8] p-4">
           <p className="font-black text-[#2f2922]">이 장의 밑줄</p>
@@ -1263,7 +1456,7 @@ function ReaderPanel({
               Runtime Debug JSON
             </summary>
             <pre className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-[#f8efe1]">
-              {JSON.stringify(debugData, null, 2)}
+              {JSON.stringify(debugDataForReader, null, 2)}
             </pre>
           </details>
         ) : null}

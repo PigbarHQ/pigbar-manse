@@ -5,6 +5,7 @@ import { CITY_OPTIONS, DEFAULT_CURRENT_DATE_TIME } from "@/src/lib/manse/constan
 import type { BirthPlace, CalendarType, Gender, ManseInput } from "@/src/lib/manse";
 import type { BlueprintBook } from "@/src/lib/blueprint/types";
 import type { BlueprintAppendix } from "@/src/lib/blueprint/types/runtime";
+import type { ManuscriptSource } from "@/src/lib/blueprint/emptyPublication";
 import { BlueprintReader } from "./BlueprintReader";
 
 type BlueprintDebugData = {
@@ -22,6 +23,7 @@ type BlueprintPublicationState = {
   book: BlueprintBook;
   appendix: BlueprintAppendix;
   debugData: BlueprintDebugData;
+  manuscriptSource: ManuscriptSource;
 };
 
 const fieldClassName =
@@ -80,6 +82,8 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
     };
 
     try {
+      console.info("[Blueprint]\nCalling /api/blueprint...");
+
       const response = await fetch("/api/blueprint", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,6 +109,7 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
       appendix={publication.appendix}
       book={publication.book}
       debugData={publication.debugData}
+      manuscriptSource={publication.manuscriptSource}
       republishPanel={
         <RepublishForm
           birthDate={birthDate}
@@ -181,7 +186,10 @@ function RepublishForm({
 }) {
   return (
     <details className="rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] p-3">
-      <summary className="cursor-pointer text-sm font-black text-[#2f2922]">책 다시 출판하기</summary>
+      <summary className="cursor-pointer text-sm font-black text-[#2f2922]">Dynamic Manse Input</summary>
+      <p className="mt-2 text-xs leading-5 text-[#8a7b69]">
+        생년월일, 성별, 출생시간, 출생지를 바꾸면 전체 Blueprint Book을 다시 생성합니다.
+      </p>
       <form className="mt-4 space-y-3" onSubmit={onSubmit}>
         <label className="block text-xs font-black text-[#6f6253]">
           이름

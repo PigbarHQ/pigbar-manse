@@ -1,4 +1,5 @@
 import type { ManseResult } from "@/src/lib/manse";
+import type { BlueprintArchitectPlan } from "@/src/lib/blueprint/architect";
 import type { BlueprintAxis } from "./axis";
 
 export type ConfidenceLabel = "High" | "Stable" | "Conditional" | "Low";
@@ -246,6 +247,8 @@ export type WriterInput = {
   coreSummary: string;
   sourceSummary: {
     pillars: string[];
+    elementFlow: string[];
+    elements: Record<string, number>;
     currentDaewoon: string | null;
     currentSewoon: string;
     calculationEngine: string;
@@ -276,6 +279,8 @@ export type WriterInput = {
       confidence: number;
     }>;
   }>;
+  classicalAnalysis?: ClassicalWriterInputItem[];
+  architectPlan?: BlueprintArchitectPlan;
   traceSeed: Array<{
     reasonId: string;
     featureIds: BlueprintFeatureId[];
@@ -293,6 +298,15 @@ export type WriterInput = {
   vocabulary: HumanVocabulary[];
   reasons: BlueprintReason[];
   writerRules: string[];
+};
+
+export type ClassicalWriterInputItem = {
+  index: number;
+  title: string;
+  sourceText: string;
+  evidence: string[];
+  structure: string;
+  interpretation: string;
 };
 
 export type ChapterReasonTrace = {
@@ -328,6 +342,15 @@ export type ChapterDraft = {
   }>;
 };
 
+export type ChapterManuscript = {
+  humanQuestion: string;
+  sceneSymbol: string;
+  classicalEntry: string;
+  structuralReading: string;
+  editorialTranslation: string;
+  closingSentence: string;
+};
+
 export type ChapterEditHistoryEntry = {
   stage: "outline" | "draft" | "rewrite" | "edit" | "final";
   changes: string[];
@@ -349,6 +372,7 @@ export type ChapterRuntime = {
   title: string;
   outline: ChapterOutline;
   draft: ChapterDraft;
+  manuscript: ChapterManuscript;
   editHistory: ChapterEditHistoryEntry[];
   finalText: string;
   quality: ChapterQuality;

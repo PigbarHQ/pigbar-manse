@@ -64,6 +64,18 @@ export type BlueprintChapter = {
   closing: string;
 };
 
+export type BlueprintPortraitManuscript = {
+  title: string;
+  coreAxis: string;
+  narrativeLens: string;
+  pages: Array<{
+    pageNo: number;
+    title: string;
+    content: string;
+  }>;
+  finalCounsel: string;
+};
+
 export type FamilyCollectionVolume = {
   volumeNo: number;
   blueprintNo: string;
@@ -100,6 +112,7 @@ export type BlueprintBook = {
     paragraphs: BlueprintParagraph[];
   };
   core: BlueprintCore;
+  portrait?: BlueprintPortraitManuscript;
   chapters: BlueprintChapter[];
   myNotesPrompt: string;
 };
