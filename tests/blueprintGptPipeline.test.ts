@@ -223,13 +223,25 @@ test("GPT prompts are externalized to Markdown files", () => {
 });
 
 test("GPT pipeline stores GPT classical analysis in Evidence and GPT manuscript in Book Mode", async () => {
+  const prompts: string[] = [];
+  const client: BlueprintGptClient = {
+    async generateText(request) {
+      if (request.stage === "classical-analysis") {
+        prompts.push(request.userPrompt);
+        return JSON.stringify(fakeClassical("주영지"));
+      }
+
+      return JSON.stringify(fakeBook(fakeClassical("주영지")));
+    },
+  };
   const publication = await buildGptBlueprintPublication({
     manseInput: blueprintNo000001Input,
-    client: fakeClient(),
+    client,
   });
   const text = bookText(publication);
   const traceThree = publication.runtime.appendix.classicalTrace?.[2];
 
+  assert.doesNotMatch(prompts[0], /compactSajuAnalysis|blindCompiler/);
   assert.equal(publication.runtime.writerInput.coreSummary, "흐름을 이어지게 한다 · Lens: Bridge");
   assert.equal(publication.runtime.writerInput.architectPlan?.rawCoreAxis, "흐름을 이어지게 한다");
   assert.equal(publication.runtime.writerInput.architectPlan?.writerCoreAxis, "흐름을 이어지게 한다");

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { calculateManse, type BirthPlace, type ManseInput } from "../src/lib/manse";
+import { compileBlindInput } from "../src/lib/blind";
+import { compileFutureInput } from "../src/lib/future";
+import { compileDecisionInput } from "../src/lib/decision";
+import { buildTemplateReaderReport } from "../src/lib/reader";
 
 const place = (
   name: string,
@@ -51,6 +56,343 @@ test("서울 1974-07-30 03:50 남성 양력은 약 -32분 보정된다", () => {
   assert.equal(Math.round(result.timeCorrection.offsetMinutes), -32);
   assert.match(result.timeCorrection.correctedDateTime ?? "", /03:17:54/);
   assert.ok(result.natalChart.hourPillar);
+});
+
+test("Blind compiler creates structured pre-GPT JSON from existing manse result", () => {
+  const result = calculateManse(baseInput({ name: "주영지" }));
+  const blindCompiler = compileBlindInput(result);
+
+  assert.equal(blindCompiler.version, "1.0.0");
+  assert.equal(blindCompiler.inputMeta.name, "주영지");
+  assert.equal(blindCompiler.pillars.year.ganKo, "갑");
+  assert.equal(blindCompiler.pillars.month.jiKo, "미");
+  assert.equal(blindCompiler.pillars.day.ganKo, "임");
+  assert.equal(blindCompiler.pillars.hour?.jiKo, "인");
+  assert.equal(blindCompiler.dayMaster.stemKo, "임");
+  assert.equal(blindCompiler.dayMaster.element, "water");
+  assert.deepEqual(blindCompiler.fiveElements.counts, result.natalChart.fiveElementsDistribution);
+  assert.ok(blindCompiler.fiveElements.balance.total > 0);
+  assert.ok(blindCompiler.fiveElements.strongest.length > 0);
+  assert.ok(blindCompiler.fiveElements.weakest.length > 0);
+  assert.ok(Object.values(blindCompiler.tenGods.counts).reduce((sum, count) => sum + count, 0) > 0);
+  assert.ok(blindCompiler.tenGods.byBranchHidden.month.length > 0);
+  assert.ok(Array.isArray(blindCompiler.relations.heavenlyStemCombinations));
+  assert.ok(Array.isArray(blindCompiler.relations.earthlyBranchCombinations));
+  assert.ok(Array.isArray(blindCompiler.relations.clashes));
+  assert.ok(Array.isArray(blindCompiler.relations.punishments));
+  assert.ok(Array.isArray(blindCompiler.relations.harms));
+  assert.ok(Array.isArray(blindCompiler.relations.destructions));
+  assert.ok(blindCompiler.roots.dayMasterRoots.length > 0);
+  assert.ok(Object.keys(blindCompiler.roots.tenGodRoots).length > 0);
+  assert.equal(blindCompiler.seasonalContext.monthBranchKo, "미");
+  assert.ok(blindCompiler.candidates.strengthCandidates.length > 0);
+  assert.ok(blindCompiler.candidates.structureCandidates.length > 0);
+  assert.ok(blindCompiler.candidates.usefulGodCandidates.length > 0);
+  assert.ok(blindCompiler.candidates.unfavorableGodCandidates.length > 0);
+  assert.ok(blindCompiler.signals.wealthSignals.every((signal) => signal.sourcePaths.length > 0));
+  assert.ok(blindCompiler.signals.careerSignals.every((signal) => signal.sourcePaths.length > 0));
+  assert.ok(blindCompiler.signals.businessSignals.every((signal) => signal.sourcePaths.length > 0));
+  assert.ok(blindCompiler.signals.relationshipSignals.every((signal) => signal.sourcePaths.length > 0));
+  assert.ok(blindCompiler.signals.healthSignals.every((signal) => signal.sourcePaths.length > 0));
+  [
+    "leadershipSignals",
+    "organizationSignals",
+    "authoritySignals",
+    "managementSignals",
+    "entrepreneurSignals",
+    "salesSignals",
+    "creativitySignals",
+    "studySignals",
+    "reputationSignals",
+    "partnershipSignals",
+    "mobilitySignals",
+    "contractSignals",
+    "legalRiskSignals",
+    "familySignals",
+    "spouseSignals",
+    "childrenSignals",
+    "parentSignals",
+    "accidentSignals",
+    "travelSignals",
+    "overseasSignals",
+    "propertySignals",
+    "investmentSignals",
+    "cashflowSignals",
+    "stressSignals",
+    "communicationSignals",
+  ].forEach((groupName) => {
+    const group = blindCompiler.signals[groupName as keyof typeof blindCompiler.signals];
+    assert.ok(Array.isArray(group), `${groupName} should be an array`);
+    group.forEach((signal) => {
+      assert.equal(signal.kind, "fact");
+      assert.match(signal.code, /^[A-Z0-9_]+$/);
+      assert.match(signal.label, /^[a-z0-9-]+$/);
+      assert.doesNotMatch(signal.code, /RISK|PRESSURE|COMPETITION|TENSION|IMBALANCE|ACTIVE|ORIENTED/);
+      assert.doesNotMatch(signal.label, /risk|pressure|competition|tension|imbalance|active|oriented/);
+      assert.ok(signal.weight >= 1 && signal.weight <= 5);
+      assert.ok(signal.confidence >= 0 && signal.confidence <= 1);
+      assert.ok(signal.sourcePaths.length > 0);
+      assert.ok(signal.sourceRules.length > 0);
+    });
+  });
+  assert.ok(blindCompiler.evidenceSummary.wealth.sourceSignalGroups.length > 0);
+  assert.ok(Array.isArray(blindCompiler.evidenceSummary.business.factCodes));
+  assert.ok(Array.isArray(blindCompiler.evidenceSummary.mobility.candidateCodes));
+  assert.equal("positiveCodes" in blindCompiler.evidenceSummary.business, false);
+  assert.equal("riskCodes" in blindCompiler.evidenceSummary.health, false);
+});
+
+test("Manse route and UI expose blindCompiler without GPT or OpenAI coupling", () => {
+  const routeSource = readFileSync(new URL("../app/api/manse/route.ts", import.meta.url), "utf8");
+  const formSource = readFileSync(new URL("../src/components/manse/ManseInputForm.tsx", import.meta.url), "utf8");
+
+  assert.match(routeSource, /compileBlindInput/);
+  assert.match(routeSource, /blindCompiler/);
+  assert.doesNotMatch(routeSource, /openai|gpt|buildGptBlueprintPublication|OPENAI_API_KEY/i);
+  assert.match(formSource, /blindCompiler: result\.blindCompiler/);
+});
+
+test("Future compiler creates future facts from Blind compiler without decisions", () => {
+  const result = calculateManse(baseInput({ name: "주영지" }));
+  const blindCompiler = compileBlindInput(result);
+  const futureCompiler = compileFutureInput(blindCompiler, {
+    currentDate: result.input.currentDateTime,
+    targetYear: 2026,
+    daeun: result.daeun,
+  });
+
+  assert.equal(futureCompiler.version, "1.0.0");
+  assert.equal(futureCompiler.targetYear, 2026);
+  assert.ok(futureCompiler.currentDaeun);
+  assert.equal(futureCompiler.currentYearGanji.ganji, "병오");
+  assert.equal(futureCompiler.nextYearGanji.ganji, "정미");
+  assert.equal(futureCompiler.monthlyGanji.length, 12);
+  assert.equal(futureCompiler.monthlyRelations.length, 12);
+  assert.equal(futureCompiler.monthlyTimingIndex.length, 12);
+  assert.equal(futureCompiler.relationIntensity.length, 12);
+  assert.ok(Array.isArray(futureCompiler.daeunRelations.clashes));
+  assert.ok(Array.isArray(futureCompiler.saeunRelations.heavenlyStemCombinations));
+  assert.equal(futureCompiler.source.futureCompilerVersion, "1.0.0");
+  assert.equal(futureCompiler.source.normalizationVersion, "1.0.0");
+  assert.equal(futureCompiler.source.usesGpt, false);
+  assert.equal(futureCompiler.source.targetYear, 2026);
+
+  Object.values(futureCompiler.futureSignals).forEach((group) => {
+    group.forEach((signal) => {
+      assert.equal(signal.kind, "fact");
+      assert.match(signal.code, /^[A-Z0-9_]+$/);
+      assert.match(signal.label, /^[a-z0-9-]+$/);
+      assert.ok(signal.weight >= 1 && signal.weight <= 5);
+      assert.ok(signal.confidence >= 0 && signal.confidence <= 1);
+      assert.ok(signal.sourcePaths.length > 0);
+      assert.ok(signal.sourceRules.length > 0);
+    });
+  });
+  assert.ok(Array.isArray(futureCompiler.futureEvidence.wealthTiming.factCodes));
+  assert.equal(
+    futureCompiler.futureEvidence.wealthTiming.factCodes.length,
+    new Set(futureCompiler.futureEvidence.wealthTiming.factCodes).size,
+  );
+  assert.ok(futureCompiler.futureEvidence.wealthTiming.occurrences.some((item) => item.code === "MONTH_SUPPORTS_WEALTH"));
+  assert.ok(Array.isArray(futureCompiler.futureEvidence.mobilityTiming.candidateCodes));
+  assert.ok(Array.isArray(futureCompiler.futureSignals.sharedMovementSignals));
+  assert.ok(futureCompiler.monthlyTimingIndex.every((item) => Array.isArray(item.activeTimingCodes)));
+  assert.ok(futureCompiler.relationIntensity.every((item) => ["LOW", "MEDIUM", "HIGH"].includes(item.intensity)));
+
+  const payload = JSON.stringify(futureCompiler);
+  assert.doesNotMatch(payload, /사업운이 좋다|이직하라|돈 번다|추천/);
+});
+
+test("Manse route and UI expose futureCompiler without GPT or OpenAI coupling", () => {
+  const routeSource = readFileSync(new URL("../app/api/manse/route.ts", import.meta.url), "utf8");
+  const formSource = readFileSync(new URL("../src/components/manse/ManseInputForm.tsx", import.meta.url), "utf8");
+
+  assert.match(routeSource, /compileFutureInput/);
+  assert.match(routeSource, /futureCompiler/);
+  assert.doesNotMatch(routeSource, /openai|gpt|buildGptBlueprintPublication|OPENAI_API_KEY/i);
+  assert.match(formSource, /futureCompiler: result\.futureCompiler/);
+});
+
+test("Decision compiler creates scored domain candidates with evidence traceability", () => {
+  const result = calculateManse(baseInput({ name: "주영지" }));
+  const blindCompiler = compileBlindInput(result);
+  const futureCompiler = compileFutureInput(blindCompiler, {
+    currentDate: result.input.currentDateTime,
+    targetYear: 2026,
+    daeun: result.daeun,
+  });
+  const decisionCompiler = compileDecisionInput({
+    blindCompiler,
+    futureCompiler,
+    targetYear: 2026,
+  });
+  const requiredDomains = ["wealth", "career", "business", "health", "mobility", "leadership"];
+
+  assert.equal(decisionCompiler.version, "1.0.0");
+  assert.equal(decisionCompiler.targetYear, 2026);
+  assert.equal(decisionCompiler.source.usesGpt, false);
+  assert.equal(decisionCompiler.domainDecisions.length, 25);
+  requiredDomains.forEach((domain) => {
+    assert.ok(decisionCompiler.domainDecisions.some((decision) => decision.domain === domain));
+  });
+  decisionCompiler.domainDecisions.forEach((decision) => {
+    assert.ok(decision.score >= 0 && decision.score <= 100);
+    assert.ok(["LOW", "MID", "HIGH", "VERY_HIGH"].includes(decision.grade));
+    assert.ok(["FAVORABLE", "NEUTRAL", "CAUTION", "RISK"].includes(decision.direction));
+    assert.ok(decision.opportunityScore >= 0 && decision.opportunityScore <= 100);
+    assert.ok(decision.directRiskScore >= 0 && decision.directRiskScore <= 100);
+    assert.ok(decision.globalRiskScore >= 0 && decision.globalRiskScore <= 100);
+    assert.ok(decision.riskScore >= 0 && decision.riskScore <= 100);
+    assert.ok(["LOW", "MID", "HIGH", "VERY_HIGH"].includes(decision.opportunityGrade));
+    assert.ok(["LOW", "MID", "HIGH", "VERY_HIGH"].includes(decision.riskGrade));
+    assert.ok(["FAVORABLE", "NEUTRAL", "WEAK"].includes(decision.opportunityDirection));
+    assert.ok(["LOW", "CAUTION", "HIGH", "RISK"].includes(decision.riskDirection));
+    assert.ok([
+      "HIGH_OPPORTUNITY_LOW_RISK",
+      "HIGH_OPPORTUNITY_HIGH_RISK",
+      "MID_OPPORTUNITY_LOW_RISK",
+      "MID_OPPORTUNITY_HIGH_RISK",
+      "LOW_OPPORTUNITY_LOW_RISK",
+      "LOW_OPPORTUNITY_HIGH_RISK",
+      "NEUTRAL",
+    ].includes(decision.readerStatus));
+    assert.ok(decision.confidence >= 0 && decision.confidence <= 1);
+    assert.ok(Array.isArray(decision.sourceSignalGroups));
+    assert.ok(Array.isArray(decision.sourcePaths));
+    assert.ok(Array.isArray(decision.sourceRules));
+    decision.positiveEvidenceCodes.forEach((code) => {
+      assert.ok(!decision.riskEvidenceCodes.includes(code));
+    });
+    decision.bestMonths.forEach((month) => {
+      assert.ok(futureCompiler.monthlyTimingIndex.some((item) => item.month === month.month));
+    });
+    decision.cautionMonths.forEach((month) => {
+      assert.ok(futureCompiler.monthlyTimingIndex.some((item) => item.month === month.month));
+    });
+  });
+  assert.ok(decisionCompiler.decisionEvidence.business);
+  assert.ok(Array.isArray(decisionCompiler.decisionEvidence.business.occurrences));
+  assert.ok(decisionCompiler.domainDecisions.some((decision) => decision.riskScore < 100));
+  const businessDecision = decisionCompiler.domainDecisions.find((decision) => decision.domain === "business");
+  const healthDecision = decisionCompiler.domainDecisions.find((decision) => decision.domain === "health");
+  const stressDecision = decisionCompiler.domainDecisions.find((decision) => decision.domain === "stress");
+  assert.ok(businessDecision);
+  assert.ok(healthDecision);
+  assert.ok(stressDecision);
+  assert.equal(businessDecision.score, businessDecision.opportunityScore);
+  assert.ok(businessDecision.opportunityScore >= 70);
+  assert.ok(businessDecision.directRiskScore >= 0);
+  assert.ok(businessDecision.globalRiskScore > 0);
+  assert.ok(businessDecision.riskScore < 100);
+  assert.equal(businessDecision.opportunityDirection, "FAVORABLE");
+  assert.ok(["LOW", "CAUTION", "HIGH", "RISK"].includes(businessDecision.riskDirection));
+  const riskOnlyCodes = [
+    "HEALTH_MISSING_ELEMENT",
+    "HEALTH_ELEMENT_SPREAD",
+    "STRESS_ELEMENT_SPREAD_GE_3_FACT",
+    "STRESS_OFFICER_COUNT_GE_2_FACT",
+    "STRESS_CLASH_CLUSTER_FACT",
+    "ACCIDENT_RELATION_COUNT_GE_2_FACT",
+    "LEGAL_RELATION_PRESENT_FACT",
+    "SPOUSE_PALACE_RELATION_PRESENT_FACT",
+    "CASHFLOW_PEER_WEALTH_CO_OCCURRENCE_FACT",
+  ];
+  [healthDecision, stressDecision].forEach((decision) => {
+    riskOnlyCodes.forEach((code) => {
+      assert.ok(!decision.positiveEvidenceCodes.includes(code));
+    });
+  });
+  assert.ok(healthDecision.riskEvidenceCodes.includes("HEALTH_MISSING_ELEMENT"));
+  assert.ok(stressDecision.riskEvidenceCodes.includes("STRESS_ELEMENT_SPREAD_GE_3_FACT"));
+  assert.ok(Array.isArray(decisionCompiler.decisionSummaryIndex.veryHighDomains));
+  assert.ok(Array.isArray(decisionCompiler.decisionSummaryIndex.highOpportunityDomains));
+  assert.ok(Array.isArray(decisionCompiler.decisionSummaryIndex.highRiskDomains));
+  assert.ok(decisionCompiler.decisionSummaryIndex.highOpportunityLowRiskDomains.includes("business"));
+  assert.ok(Array.isArray(decisionCompiler.decisionSummaryIndex.bestMonthsByDomain.business));
+
+  const payload = JSON.stringify(decisionCompiler);
+  assert.doesNotMatch(payload, /사업해라|이직하지 마라|돈 번다|OpenAI|OPENAI_API_KEY/);
+});
+
+test("Manse route and UI expose decisionCompiler without GPT or OpenAI coupling", () => {
+  const routeSource = readFileSync(new URL("../app/api/manse/route.ts", import.meta.url), "utf8");
+  const formSource = readFileSync(new URL("../src/components/manse/ManseInputForm.tsx", import.meta.url), "utf8");
+
+  assert.match(routeSource, /compileDecisionInput/);
+  assert.match(routeSource, /decisionCompiler/);
+  assert.doesNotMatch(routeSource, /openai|gpt|buildGptBlueprintPublication|OPENAI_API_KEY/i);
+  assert.match(formSource, /decisionCompiler: result\.decisionCompiler/);
+});
+
+test("Template Reader creates safe report JSON from Decision compiler without GPT", () => {
+  const result = calculateManse(baseInput({ name: "주영지" }));
+  const blindCompiler = compileBlindInput(result);
+  const futureCompiler = compileFutureInput(blindCompiler, {
+    currentDate: result.input.currentDateTime,
+    targetYear: 2026,
+    daeun: result.daeun,
+  });
+  const decisionCompiler = compileDecisionInput({
+    blindCompiler,
+    futureCompiler,
+    targetYear: 2026,
+  });
+  const readerReport = buildTemplateReaderReport({
+    decisionAnalysis: decisionCompiler,
+    targetYear: 2026,
+  });
+  const businessReport = readerReport.domainReports.find((report) => report.domain === "business");
+
+  assert.equal(readerReport.version, "1.0.0");
+  assert.equal(readerReport.source.readerVersion, "0.1.0");
+  assert.equal(readerReport.source.usesGpt, false);
+  assert.equal(readerReport.targetYear, 2026);
+  assert.ok(readerReport.headline.length > 0);
+  assert.match(readerReport.headline, /동업|창업|확장|사업|리더십|기회|리스크|변동성/);
+  assert.equal(readerReport.domainReports.length, decisionCompiler.domainDecisions.length);
+  assert.ok(readerReport.visibleDomainReports.length > 0);
+  assert.ok(readerReport.visibleDomainReports.length <= 5);
+  assert.ok(readerReport.topOpportunities.length <= 5);
+  assert.ok(readerReport.highRiskOpportunities.length <= 5);
+  assert.ok(readerReport.topRisks.length <= 5);
+  readerReport.topOpportunities.forEach((item) => {
+    assert.ok(item.riskScore < 50);
+  });
+  readerReport.highRiskOpportunities.forEach((item) => {
+    assert.ok(item.opportunityScore >= 70);
+    assert.ok(item.riskScore >= 50);
+  });
+  readerReport.domainReports.forEach((report) => {
+    report.displayBestMonths.forEach((month) => {
+      assert.ok(!report.displayCautionMonths.includes(month));
+    });
+  });
+  assert.ok(businessReport);
+  assert.equal(businessReport.readerStatus, "HIGH_OPPORTUNITY_LOW_RISK");
+  assert.match(businessReport.summary, /사업 영역은 기회 신호가 강하고 리스크 신호는 낮은 편입니다/);
+  assert.ok(businessReport.evidenceBullets.every((line) => /^(긍정 신호|리스크 신호|시기 신호): /.test(line)));
+  assert.ok(businessReport.evidenceBullets.some((line) => line.includes("생산/표현 신호가 확인됨")));
+  assert.ok(businessReport.evidenceBullets.every((line) => !/[A-Z]{2,}_[A-Z0-9_]+/.test(line)));
+  assert.ok(readerReport.monthHighlights.some((line) => /유리 신호 월|주의 신호 월/.test(line)));
+  assert.ok(readerReport.condensedMonthHighlights.length > 0);
+  assert.ok(readerReport.condensedMonthHighlights.length <= readerReport.monthHighlights.length);
+  assert.ok(readerReport.cautionNotes.includes("Reader는 Decision Compiler에 존재하는 근거 코드만 사용하며, 새로운 판단을 생성하지 않습니다."));
+
+  const payload = JSON.stringify(readerReport);
+  const debugPayload = JSON.stringify(decisionCompiler);
+  assert.match(debugPayload, /BUSINESS_OUTPUT_PRESENT/);
+  assert.doesNotMatch(payload, /BUSINESS_OUTPUT_PRESENT|HIGH_RELATION_MONTH_7|HEALTH_MISSING_ELEMENT/);
+  assert.doesNotMatch(payload, /무조건 해라|반드시 돈 번다|이혼한다|병 걸린다|OpenAI|OPENAI_API_KEY/);
+});
+
+test("Manse route and UI expose readerReport without GPT or OpenAI coupling", () => {
+  const routeSource = readFileSync(new URL("../app/api/manse/route.ts", import.meta.url), "utf8");
+  const formSource = readFileSync(new URL("../src/components/manse/ManseInputForm.tsx", import.meta.url), "utf8");
+
+  assert.match(routeSource, /buildTemplateReaderReport/);
+  assert.match(routeSource, /readerReport/);
+  assert.doesNotMatch(routeSource, /openai|gpt|buildGptBlueprintPublication|OPENAI_API_KEY/i);
+  assert.match(formSource, /readerReport: result\.readerReport/);
 });
 
 test("1974 서울 회귀 케이스는 Astronomy Engine 입추로 대운 시작을 계산한다", () => {

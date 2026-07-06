@@ -2,7 +2,7 @@ import type { BlueprintAppendix } from "@/src/lib/blueprint/types/runtime";
 import type { BlueprintBook } from "@/src/lib/blueprint/types";
 import type { ManseInput } from "@/src/lib/manse";
 
-export type ManuscriptSource = "GPT" | "Legacy" | "Empty";
+export type ManuscriptSource = "GPT" | "Legacy" | "Sample" | "Empty";
 
 export const emptyBlueprintAppendix: BlueprintAppendix = {
   pillars: {

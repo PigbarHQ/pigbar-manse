@@ -1,5 +1,6 @@
 export * from "./adapter";
 export * from "./appendix";
+export * from "./blindCompiler";
 export * from "./classical";
 export * from "./core";
 export * from "./features";

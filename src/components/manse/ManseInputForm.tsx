@@ -3,6 +3,10 @@
 import { FormEvent, useState } from "react";
 import { CITY_OPTIONS, DEFAULT_CURRENT_DATE_TIME } from "@/src/lib/manse/constants";
 import type { BirthPlace, CalendarType, Gender, ManseInput, ManseResult } from "@/src/lib/manse";
+import type { CompactSajuAnalysis } from "@/src/lib/blind";
+import type { FutureAnalysis } from "@/src/lib/future";
+import type { DecisionAnalysis } from "@/src/lib/decision";
+import type { ReaderReport } from "@/src/lib/reader";
 import { LuckTimeline } from "./LuckTimeline";
 import { NatalChartTable } from "./NatalChartTable";
 import { TimeCorrectionPanel } from "./TimeCorrectionPanel";
@@ -10,6 +14,13 @@ import { WarningPanel } from "./WarningPanel";
 
 const fieldClassName =
   "h-11 w-full rounded-lg border border-stone-300 bg-white px-4 text-sm text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-stone-700 focus:ring-4 focus:ring-stone-900/10";
+
+type ManseResultWithBlindCompiler = ManseResult & {
+  blindCompiler?: CompactSajuAnalysis;
+  futureCompiler?: FutureAnalysis;
+  decisionCompiler?: DecisionAnalysis;
+  readerReport?: ReaderReport;
+};
 
 function getBirthPlace(name: string): BirthPlace {
   const city = CITY_OPTIONS.find((option) => option.name === name) ?? CITY_OPTIONS[0];
@@ -32,7 +43,7 @@ export function ManseInputForm() {
   const [gender, setGender] = useState<Gender>("male");
   const [cityName, setCityName] = useState<string>(CITY_OPTIONS[0].name);
   const [currentDateTime, setCurrentDateTime] = useState(DEFAULT_CURRENT_DATE_TIME);
-  const [result, setResult] = useState<ManseResult | null>(null);
+  const [result, setResult] = useState<ManseResultWithBlindCompiler | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -70,7 +81,7 @@ export function ManseInputForm() {
       return;
     }
 
-    setResult(data as ManseResult);
+    setResult(data as ManseResultWithBlindCompiler);
     setShowDebug(false);
   }
 
@@ -195,6 +206,10 @@ export function ManseInputForm() {
                         daeun: result.daeun,
                         currentLuck: result.currentLuck,
                         blueprintInput: result.blueprintInput,
+                        blindCompiler: result.blindCompiler,
+                        futureCompiler: result.futureCompiler,
+                        decisionCompiler: result.decisionCompiler,
+                        readerReport: result.readerReport,
                         debug: result.debug,
                       },
                       null,
