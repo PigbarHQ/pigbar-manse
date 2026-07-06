@@ -26,6 +26,8 @@ type BlueprintPublicationState = {
   manuscriptSource: ManuscriptSource;
 };
 
+type BlueprintUiState = "WELCOME" | "PUBLISHING" | "PUBLISHED" | "READING" | "EDIT";
+
 const fieldClassName =
   "mt-1 h-10 w-full rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-3 text-sm text-[#2f2922] outline-none transition placeholder:text-[#b5a996] focus:border-[#8a6b2e] focus:ring-2 focus:ring-[#f7df9c]/50";
 
@@ -49,6 +51,7 @@ function cityNameFromInput(input: ManseInput) {
 
 export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPublicationState }) {
   const [publication, setPublication] = useState(initial);
+  const [uiState, setUiState] = useState<BlueprintUiState>(initial.book.portrait ? "PUBLISHED" : "WELCOME");
   const [name, setName] = useState(initial.manseInput.name ?? "주영지");
   const [gender, setGender] = useState<Gender>(initial.manseInput.gender);
   const [birthDate, setBirthDate] = useState(initial.manseInput.birthDate);
@@ -58,15 +61,13 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
   const [timeUnknown, setTimeUnknown] = useState(Boolean(initial.manseInput.unknownTime));
   const [cityName, setCityName] = useState(cityNameFromInput(initial.manseInput));
   const [useLocalMeanTime, setUseLocalMeanTime] = useState(Boolean(initial.manseInput.useLocalMeanTime));
-  const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const readerRef = useRef<HTMLDivElement>(null);
-  const [isMobileInputOpen, setIsMobileInputOpen] = useState(!initial.book.portrait);
+  const isPublishing = uiState === "PUBLISHING";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsPublishing(true);
+    setUiState("PUBLISHING");
     setError(null);
 
     const payload: ManseInput = {
@@ -96,92 +97,78 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
 
       if (!response.ok) {
         setError(data.error ?? "책을 만들지 못했습니다.");
+        setUiState(publication.book.portrait ? "EDIT" : "WELCOME");
         return;
       }
 
       setPublication(data as BlueprintPublicationState);
-      setIsMobileInputOpen(false);
-      window.setTimeout(() => readerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      setUiState("PUBLISHED");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "책을 만들지 못했습니다.");
-    } finally {
-      setIsPublishing(false);
+      setUiState(publication.book.portrait ? "EDIT" : "WELCOME");
     }
+  }
+
+  const inputForm = (
+    <RepublishForm
+      birthDate={birthDate}
+      birthTime={birthTime}
+      calendarType={calendarType}
+      cityName={cityName}
+      error={error}
+      formRef={formRef}
+      gender={gender}
+      isLeapMonth={isLeapMonth}
+      isPublishing={isPublishing}
+      name={name}
+      onBirthDateChange={setBirthDate}
+      onBirthTimeChange={setBirthTime}
+      onCalendarTypeChange={setCalendarType}
+      onCityNameChange={setCityName}
+      onGenderChange={setGender}
+      onIsLeapMonthChange={setIsLeapMonth}
+      onNameChange={setName}
+      onSubmit={handleSubmit}
+      onTimeUnknownChange={setTimeUnknown}
+      onUseLocalMeanTimeChange={setUseLocalMeanTime}
+      timeUnknown={timeUnknown}
+      useLocalMeanTime={useLocalMeanTime}
+    />
+  );
+
+  if (uiState === "WELCOME" || uiState === "EDIT") {
+    return (
+      <main className="min-h-screen bg-[#f3efe7] px-4 py-8 text-[#2f2922] sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[480px] items-center justify-center">
+          <div className="w-full">
+            {uiState === "EDIT" ? (
+              <button
+                className="mb-4 rounded-full px-4 py-2 text-sm font-black text-[#8a6b2e] transition hover:bg-[#eadfce]"
+                onClick={() => setUiState(publication.book.portrait ? "PUBLISHED" : "WELCOME")}
+                type="button"
+              >
+                표지로 돌아가기
+              </button>
+            ) : null}
+            {inputForm}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen bg-[#f3efe7] text-[#2f2922]">
-      <div className="mx-auto grid min-h-screen w-full max-w-[1280px] gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="border-b border-[#ded1bd] bg-[#f8f1e6] px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
-          <div className="hidden lg:block">
-            <RepublishForm
-              birthDate={birthDate}
-              birthTime={birthTime}
-              calendarType={calendarType}
-              cityName={cityName}
-              error={error}
-              formRef={formRef}
-              gender={gender}
-              isLeapMonth={isLeapMonth}
-              isPublishing={isPublishing}
-              name={name}
-              onBirthDateChange={setBirthDate}
-              onBirthTimeChange={setBirthTime}
-              onCalendarTypeChange={setCalendarType}
-              onCityNameChange={setCityName}
-              onGenderChange={setGender}
-              onIsLeapMonthChange={setIsLeapMonth}
-              onNameChange={setName}
-              onSubmit={handleSubmit}
-              onTimeUnknownChange={setTimeUnknown}
-              onUseLocalMeanTimeChange={setUseLocalMeanTime}
-              timeUnknown={timeUnknown}
-              useLocalMeanTime={useLocalMeanTime}
-            />
-          </div>
-          <details className="lg:hidden" onToggle={(event) => setIsMobileInputOpen(event.currentTarget.open)} open={isMobileInputOpen}>
-            <summary className="cursor-pointer rounded-[4px] border border-[#d8cdbb] bg-[#fffaf0] px-4 py-3 text-sm font-black text-[#2f2922]">
-              Blueprint Input
-            </summary>
-            <div className="mt-3">
-              <RepublishForm
-                birthDate={birthDate}
-                birthTime={birthTime}
-                calendarType={calendarType}
-                cityName={cityName}
-                error={error}
-                formRef={formRef}
-                gender={gender}
-                isLeapMonth={isLeapMonth}
-                isPublishing={isPublishing}
-                name={name}
-                onBirthDateChange={setBirthDate}
-                onBirthTimeChange={setBirthTime}
-                onCalendarTypeChange={setCalendarType}
-                onCityNameChange={setCityName}
-                onGenderChange={setGender}
-                onIsLeapMonthChange={setIsLeapMonth}
-                onNameChange={setName}
-                onSubmit={handleSubmit}
-                onTimeUnknownChange={setTimeUnknown}
-                onUseLocalMeanTimeChange={setUseLocalMeanTime}
-                timeUnknown={timeUnknown}
-                useLocalMeanTime={useLocalMeanTime}
-              />
-            </div>
-          </details>
-        </aside>
-        <div ref={readerRef}>
-          <BlueprintReader
-            appendix={publication.appendix}
-            book={publication.book}
-            debugData={publication.debugData}
-            isPublishing={isPublishing}
-            manuscriptSource={publication.manuscriptSource}
-            onCreateBook={() => formRef.current?.requestSubmit()}
-          />
-        </div>
-      </div>
+      <BlueprintReader
+        appendix={publication.appendix}
+        book={publication.book}
+        debugData={publication.debugData}
+        manuscriptSource={publication.manuscriptSource}
+        mode={uiState === "PUBLISHING" ? "publishing" : uiState === "PUBLISHED" ? "published" : "reading"}
+        onCreateBook={() => setUiState("EDIT")}
+        onEditInput={() => setUiState("EDIT")}
+        onReadBook={() => setUiState("READING")}
+      />
     </main>
   );
 }

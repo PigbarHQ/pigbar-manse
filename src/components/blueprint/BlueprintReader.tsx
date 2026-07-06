@@ -15,6 +15,8 @@ type BlueprintDebugData = {
   appendix?: unknown;
 };
 
+type BlueprintReaderMode = "empty" | "publishing" | "published" | "reading";
+
 type BlueprintReaderProps = {
   appendix?: BlueprintAppendix;
   book: BlueprintBook;
@@ -22,23 +24,36 @@ type BlueprintReaderProps = {
   isPublishing?: boolean;
   manuscriptSource?: ManuscriptSource;
   onCreateBook?: () => void;
+  onEditInput?: () => void;
+  onReadBook?: () => void;
   republishPanel?: ReactNode;
+  mode?: BlueprintReaderMode;
 };
 
 function hasPortraitPages(book: BlueprintBook) {
   return Boolean(book.portrait?.pages?.some((page) => page.content.trim().length > 0));
 }
 
-export function BlueprintReader({ book, isPublishing = false, onCreateBook }: BlueprintReaderProps) {
+export function BlueprintReader({
+  book,
+  isPublishing = false,
+  mode,
+  onCreateBook,
+  onEditInput,
+  onReadBook,
+}: BlueprintReaderProps) {
   const portrait = book.portrait;
+  const readerMode: BlueprintReaderMode = mode ?? (isPublishing ? "publishing" : portrait ? "reading" : "empty");
 
   return (
     <section className="mx-auto w-full max-w-[920px] px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
-      {isPublishing ? <WritingProgressView /> : null}
-      {!portrait && !isPublishing ? <EmptyPortraitState onCreateBook={onCreateBook} /> : null}
-      {portrait && !isPublishing ? (
+      {readerMode === "publishing" ? <WritingProgressView /> : null}
+      {readerMode === "empty" ? <EmptyPortraitState onCreateBook={onCreateBook} /> : null}
+      {portrait && readerMode === "published" ? (
+        <CompletedBookView book={book} onEditInput={onEditInput ?? onCreateBook} onReadBook={onReadBook} />
+      ) : null}
+      {portrait && readerMode === "reading" ? (
         <div className="space-y-12">
-          <CompletedBookView book={book} onCreateBook={onCreateBook} />
           <div className="space-y-10 scroll-mt-8" id="portrait-reader-pages">
             <PortraitCover
               coreAxis={portrait.coreAxis}
@@ -48,6 +63,17 @@ export function BlueprintReader({ book, isPublishing = false, onCreateBook }: Bl
             <PortraitPages book={book} />
             <FinalCounsel counsel={portrait.finalCounsel} />
           </div>
+          {onEditInput ? (
+            <div className="flex justify-center">
+              <button
+                className="rounded-full border border-[#d8cdbb] bg-[#fffaf0] px-5 py-3 text-sm font-black text-[#8a6b2e] transition hover:bg-[#f4eadc]"
+                onClick={onEditInput}
+                type="button"
+              >
+                입력 다시 열기
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -121,7 +147,15 @@ function BookGlowIllustration() {
   );
 }
 
-function CompletedBookView({ book, onCreateBook }: { book: BlueprintBook; onCreateBook?: () => void }) {
+function CompletedBookView({
+  book,
+  onEditInput,
+  onReadBook,
+}: {
+  book: BlueprintBook;
+  onEditInput?: () => void;
+  onReadBook?: () => void;
+}) {
   const portrait = book.portrait;
 
   if (!portrait) {
@@ -129,10 +163,6 @@ function CompletedBookView({ book, onCreateBook }: { book: BlueprintBook; onCrea
   }
 
   const visiblePages = portrait.pages.slice(0, 3);
-
-  function scrollToReader() {
-    document.getElementById("portrait-reader-pages")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
 
   return (
     <section className="rounded-[8px] border border-[#e2d4c0] bg-[#fffaf2] px-6 py-9 shadow-[0_24px_70px_rgba(82,62,35,0.13)] sm:px-8 lg:px-12">
@@ -148,7 +178,7 @@ function CompletedBookView({ book, onCreateBook }: { book: BlueprintBook; onCrea
               <button
                 className="flex w-full items-center gap-4 border-b border-[#e8dece] px-4 py-4 text-left last:border-b-0 transition hover:bg-[#fff7ea]"
                 key={page.pageNo}
-                onClick={scrollToReader}
+                onClick={onReadBook}
                 type="button"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f2e7d6] text-xl text-[#b18440]">▭</span>
@@ -161,7 +191,7 @@ function CompletedBookView({ book, onCreateBook }: { book: BlueprintBook; onCrea
             ))}
             <button
               className="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-[#fff7ea]"
-              onClick={scrollToReader}
+              onClick={onReadBook}
               type="button"
             >
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f2e7d6] text-xl text-[#b18440]">✧</span>
@@ -175,18 +205,18 @@ function CompletedBookView({ book, onCreateBook }: { book: BlueprintBook; onCrea
           <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <button
               className="h-12 w-full max-w-xs rounded-full bg-[#2f2118] px-8 text-sm font-black text-[#fff8ec] shadow-[0_12px_26px_rgba(47,33,24,0.18)] transition hover:bg-[#1d140f]"
-              onClick={scrollToReader}
+              onClick={onReadBook}
               type="button"
             >
               책 읽기 시작하기
             </button>
-            {onCreateBook ? (
+            {onEditInput ? (
               <button
                 className="h-11 rounded-full px-5 text-sm font-bold text-[#8a6b2e] transition hover:bg-[#f4eadc]"
-                onClick={onCreateBook}
+                onClick={onEditInput}
                 type="button"
               >
-                다시 만들기
+                입력 다시 열기
               </button>
             ) : null}
           </div>
