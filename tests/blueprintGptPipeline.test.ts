@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import {
   buildGptBlueprintPublication,
   createOpenAIBlueprintGptClient,
@@ -11,9 +11,7 @@ import {
 import { logOpenAiApiKeyStatus, maskOpenAiApiKey } from "../src/lib/blueprint/openaiEnv";
 import { buildEmptyBlueprintPublication } from "../src/lib/blueprint/emptyPublication";
 import { hasMyeongliCoreAxisTerms } from "../src/lib/blueprint/architect";
-import { BLUEPRINT_PHILOSOPHY_PROMPT } from "../src/lib/blueprint/prompts/blueprintPhilosophyPrompt";
-import { BLIND_CLASSICAL_PROMPT } from "../src/lib/blueprint/prompts/blindClassicalPrompt";
-import { EDITORIAL_STYLE_PROMPT } from "../src/lib/blueprint/prompts/editorialStylePrompt";
+import { loadBlueprintPrompt } from "../src/lib/blueprint/prompts/promptLoader";
 import { blueprintNo000001Input } from "../src/lib/blueprint/no000001";
 import { CITY_OPTIONS, type ManseInput } from "../src/lib/manse";
 
@@ -186,22 +184,42 @@ function bookText(publication: Awaited<ReturnType<typeof buildGptBlueprintPublic
     : "";
 }
 
-test("Fixed prompts contain global philosophy, blind classical, and editorial writer constraints", () => {
-  assert.match(BLUEPRINT_PHILOSOPHY_PROMPT, /Prompt는 프로젝트의 Source of Truth/);
-  assert.match(BLUEPRINT_PHILOSOPHY_PROMPT, /코드는 Prompt를 실행하는 Runtime/);
-  assert.match(BLUEPRINT_PHILOSOPHY_PROMPT, /Narrative Lens는 비유가 아니다/);
-  assert.match(BLUEPRINT_PHILOSOPHY_PROMPT, /독자가 사람을 기억하면 성공/);
-  assert.match(BLIND_CLASSICAL_PROMPT, /너는 고전 명리 분석 엔진이다/);
-  assert.match(BLIND_CLASSICAL_PROMPT, /명조 확정/);
-  assert.match(BLIND_CLASSICAL_PROMPT, /최종 한 문장/);
-  assert.match(BLIND_CLASSICAL_PROMPT, /narrativeLensCandidates/);
-  assert.match(BLIND_CLASSICAL_PROMPT, /finalCounselDirection/);
-  assert.match(EDITORIAL_STYLE_PROMPT, /너는 Portrait Book 작가다/);
-  assert.match(EDITORIAL_STYLE_PROMPT, /오직 Blind 결과 JSON과 selected Narrative Lens만 본다/);
-  assert.match(EDITORIAL_STYLE_PROMPT, /Core Axis를 처음부터 끝까지 증명하라/);
-  assert.match(EDITORIAL_STYLE_PROMPT, /Lens vocabulary는 과도하게 반복하지 않는다/);
-  assert.match(EDITORIAL_STYLE_PROMPT, /"pages": \[/);
-  assert.doesNotMatch(EDITORIAL_STYLE_PROMPT, /Prompt는 프로젝트의 Source of Truth/);
+test("Fixed prompts load from Markdown with versions", () => {
+  const blueprintPhilosophyPrompt = loadBlueprintPrompt("blueprint-philosophy");
+  const blindClassicalPrompt = loadBlueprintPrompt("blind-classical");
+  const editorialStylePrompt = loadBlueprintPrompt("editorial-style");
+
+  assert.equal(blueprintPhilosophyPrompt.version, "1.0.0");
+  assert.equal(blindClassicalPrompt.version, "3.0.0");
+  assert.equal(editorialStylePrompt.version, "3.3.0");
+  assert.ok(blueprintPhilosophyPrompt.content.length > 100);
+  assert.ok(blindClassicalPrompt.content.length > 100);
+  assert.ok(editorialStylePrompt.content.length > 100);
+  assert.notEqual(blueprintPhilosophyPrompt.content, blindClassicalPrompt.content);
+  assert.notEqual(blindClassicalPrompt.content, editorialStylePrompt.content);
+});
+
+test("GPT prompts are externalized to Markdown files", () => {
+  const pipelineSource = readFileSync(new URL("../src/lib/blueprint/gptPipeline.ts", import.meta.url), "utf8");
+  const promptLoaderSource = readFileSync(new URL("../src/lib/blueprint/prompts/promptLoader.ts", import.meta.url), "utf8");
+  const promptDirectory = readdirSync(new URL("../src/lib/blueprint/prompts", import.meta.url));
+  const promptNames = [
+    "blueprint-system",
+    "blueprint-philosophy",
+    "blind-classical",
+    "editorial-style",
+    "classical-analysis-user",
+    "portrait-book-user",
+  ] as const;
+
+  promptNames.forEach((name) => {
+    const promptStart = loadBlueprintPrompt(name).content.slice(0, 24);
+
+    assert.ok(promptDirectory.includes(`${name}.md`));
+    assert.equal(pipelineSource.includes(promptStart), false);
+    assert.equal(promptLoaderSource.includes(promptStart), false);
+  });
+  assert.equal(promptDirectory.some((fileName) => fileName.endsWith("Prompt.ts")), false);
 });
 
 test("GPT pipeline stores GPT classical analysis in Evidence and GPT manuscript in Book Mode", async () => {
@@ -265,19 +283,38 @@ test("Portrait writer prompt receives Blind GPT Result JSON directly", async () 
 
   assert.ok(prompts.length > 0);
   assert.equal(systemPrompts.length, 2);
-  assert.match(systemPrompts[0], /Prompt는 프로젝트의 Source of Truth/);
-  assert.match(systemPrompts[0], /너는 고전 명리 분석 엔진이다/);
-  assert.match(systemPrompts[1], /Prompt는 프로젝트의 Source of Truth/);
-  assert.match(systemPrompts[1], /너는 Portrait Book 작가다/);
-  assert.match(prompts[0], /Blind GPT Result JSON/);
-  assert.match(prompts[0], /Blind GPT Result JSON/);
+  assert.ok(systemPrompts[0].includes(loadBlueprintPrompt("blueprint-philosophy").content));
+  assert.ok(systemPrompts[0].includes(loadBlueprintPrompt("blind-classical").content));
+  assert.ok(systemPrompts[1].includes(loadBlueprintPrompt("blueprint-philosophy").content));
+  assert.ok(systemPrompts[1].includes(loadBlueprintPrompt("editorial-style").content));
+  assert.ok(prompts[0].includes(loadBlueprintPrompt("portrait-book-user").content.split("{{SELECTED_LENS}}")[0].trim()));
   assert.match(prompts[0], /흐름을 이어지게 한다/);
   assert.match(prompts[0], /"coreAxis"\s*:/);
   assert.match(prompts[0], /notThisPerson/);
-  assert.match(prompts[0], /selected Narrative Lens/);
-  assert.doesNotMatch(prompts[0], /Blind Classical Analysis for fidelity only/);
-  assert.doesNotMatch(prompts[0], /Write one finished Portrait Book chapter/);
-  assert.doesNotMatch(prompts[0], /Chapter source structure/);
+});
+
+test("GPT classical trace handles non-string section fields without blocking Portrait Book", async () => {
+  const classical = fakeClassical("주영지");
+
+  classical.sections[0].structure = ["첫 줄", { marker: "object-structure" }];
+  classical.sections[0].interpretation = { summary: "객체 해석" };
+
+  const client: BlueprintGptClient = {
+    async generateText(request) {
+      return request.stage === "classical-analysis"
+        ? JSON.stringify(classical)
+        : JSON.stringify(fakeBook(classical));
+    },
+  };
+
+  const publication = await buildGptBlueprintPublication({
+    manseInput: blueprintNo000001Input,
+    client,
+  });
+
+  assert.equal(publication.book.portrait?.pages.length, 5);
+  assert.deepEqual(publication.runtime.appendix.classicalTrace?.[0]?.classical, ["첫 줄", "{\"marker\":\"object-structure\"}"]);
+  assert.deepEqual(publication.runtime.appendix.classicalTrace?.[0]?.blueprint, ["{\"summary\":\"객체 해석\"}"]);
 });
 
 test("Blind GPT result fails validation when coreAxis contains myeongli terms", async () => {
@@ -448,8 +485,8 @@ test("Empty Book Mode publication exposes no legacy manuscript when GPT output i
   assert.equal(publication.manuscriptSource, "Empty");
   assert.equal(publication.book.chapters.length, 0);
   assert.match(publication.book.metadata.title, /GPT Blueprint 생성 필요/);
-  assert.match(readerSource, /GPT Blueprint 생성에 OPENAI_API_KEY가 필요합니다/);
-  assert.match(readerSource, /\.env\.local 생성 방법/);
+  assert.match(readerSource, /아직 출판된 책이 없습니다/);
+  assert.match(readerSource, /왼쪽 입력값을 확인한 뒤 Portrait Book을 생성하세요/);
   assert.doesNotMatch(bookPayload, /Layer 1/);
   assert.doesNotMatch(bookPayload, /사주 원문/);
   assert.doesNotMatch(bookPayload, /Blueprint Interpretation/);

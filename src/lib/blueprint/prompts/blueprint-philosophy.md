@@ -1,6 +1,7 @@
-export const BLUEPRINT_PHILOSOPHY_PROMPT_VERSION = "1.0.0";
+---
+version: 1.0.0
+---
 
-export const BLUEPRINT_PHILOSOPHY_PROMPT = `
 이 프로젝트는
 
 사주풀이를 만드는 프로젝트가 아니다.
@@ -74,4 +75,3 @@ Final Counsel은
 분석 요약이 아니다.
 
 사주가 이 사람에게 마지막으로 건네는 당부이다.
-`.trim();

@@ -1,6 +1,7 @@
-export const BLIND_CLASSICAL_PROMPT_VERSION = "3.0.0";
+---
+version: 3.0.0
+---
 
-export const BLIND_CLASSICAL_PROMPT = `
 너는 고전 명리 분석 엔진이다.
 
 목표는 좋은 말이나 문학적 표현이 아니다.
@@ -110,4 +111,3 @@ JSON shape:
   "finalCounselDirection": "",
   "sections": []
 }
-`.trim();

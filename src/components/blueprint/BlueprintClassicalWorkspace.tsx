@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, type RefObject, useRef, useState } from "react";
 import { CITY_OPTIONS, DEFAULT_CURRENT_DATE_TIME } from "@/src/lib/manse/constants";
 import type { BirthPlace, CalendarType, Gender, ManseInput } from "@/src/lib/manse";
 import type { BlueprintBook } from "@/src/lib/blueprint/types";
@@ -60,6 +60,9 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
   const [useLocalMeanTime, setUseLocalMeanTime] = useState(Boolean(initial.manseInput.useLocalMeanTime));
   const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const readerRef = useRef<HTMLDivElement>(null);
+  const [isMobileInputOpen, setIsMobileInputOpen] = useState(!initial.book.portrait);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,50 +95,94 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error ?? "책을 다시 출판하지 못했습니다.");
+        setError(data.error ?? "책을 만들지 못했습니다.");
         return;
       }
 
       setPublication(data as BlueprintPublicationState);
+      setIsMobileInputOpen(false);
+      window.setTimeout(() => readerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "책을 다시 출판하지 못했습니다.");
+      setError(requestError instanceof Error ? requestError.message : "책을 만들지 못했습니다.");
     } finally {
       setIsPublishing(false);
     }
   }
 
   return (
-    <BlueprintReader
-      appendix={publication.appendix}
-      book={publication.book}
-      debugData={publication.debugData}
-      manuscriptSource={publication.manuscriptSource}
-      republishPanel={
-        <RepublishForm
-          birthDate={birthDate}
-          birthTime={birthTime}
-          calendarType={calendarType}
-          cityName={cityName}
-          error={error}
-          gender={gender}
-          isLeapMonth={isLeapMonth}
-          isPublishing={isPublishing}
-          name={name}
-          onBirthDateChange={setBirthDate}
-          onBirthTimeChange={setBirthTime}
-          onCalendarTypeChange={setCalendarType}
-          onCityNameChange={setCityName}
-          onGenderChange={setGender}
-          onIsLeapMonthChange={setIsLeapMonth}
-          onNameChange={setName}
-          onSubmit={handleSubmit}
-          onTimeUnknownChange={setTimeUnknown}
-          onUseLocalMeanTimeChange={setUseLocalMeanTime}
-          timeUnknown={timeUnknown}
-          useLocalMeanTime={useLocalMeanTime}
-        />
-      }
-    />
+    <main className="min-h-screen bg-[#f3efe7] text-[#2f2922]">
+      <div className="mx-auto grid min-h-screen w-full max-w-[1280px] gap-0 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="border-b border-[#ded1bd] bg-[#f8f1e6] px-4 py-4 lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r lg:px-5 lg:py-6">
+          <div className="hidden lg:block">
+            <RepublishForm
+              birthDate={birthDate}
+              birthTime={birthTime}
+              calendarType={calendarType}
+              cityName={cityName}
+              error={error}
+              formRef={formRef}
+              gender={gender}
+              isLeapMonth={isLeapMonth}
+              isPublishing={isPublishing}
+              name={name}
+              onBirthDateChange={setBirthDate}
+              onBirthTimeChange={setBirthTime}
+              onCalendarTypeChange={setCalendarType}
+              onCityNameChange={setCityName}
+              onGenderChange={setGender}
+              onIsLeapMonthChange={setIsLeapMonth}
+              onNameChange={setName}
+              onSubmit={handleSubmit}
+              onTimeUnknownChange={setTimeUnknown}
+              onUseLocalMeanTimeChange={setUseLocalMeanTime}
+              timeUnknown={timeUnknown}
+              useLocalMeanTime={useLocalMeanTime}
+            />
+          </div>
+          <details className="lg:hidden" onToggle={(event) => setIsMobileInputOpen(event.currentTarget.open)} open={isMobileInputOpen}>
+            <summary className="cursor-pointer rounded-[4px] border border-[#d8cdbb] bg-[#fffaf0] px-4 py-3 text-sm font-black text-[#2f2922]">
+              Blueprint Input
+            </summary>
+            <div className="mt-3">
+              <RepublishForm
+                birthDate={birthDate}
+                birthTime={birthTime}
+                calendarType={calendarType}
+                cityName={cityName}
+                error={error}
+                formRef={formRef}
+                gender={gender}
+                isLeapMonth={isLeapMonth}
+                isPublishing={isPublishing}
+                name={name}
+                onBirthDateChange={setBirthDate}
+                onBirthTimeChange={setBirthTime}
+                onCalendarTypeChange={setCalendarType}
+                onCityNameChange={setCityName}
+                onGenderChange={setGender}
+                onIsLeapMonthChange={setIsLeapMonth}
+                onNameChange={setName}
+                onSubmit={handleSubmit}
+                onTimeUnknownChange={setTimeUnknown}
+                onUseLocalMeanTimeChange={setUseLocalMeanTime}
+                timeUnknown={timeUnknown}
+                useLocalMeanTime={useLocalMeanTime}
+              />
+            </div>
+          </details>
+        </aside>
+        <div ref={readerRef}>
+          <BlueprintReader
+            appendix={publication.appendix}
+            book={publication.book}
+            debugData={publication.debugData}
+            isPublishing={isPublishing}
+            manuscriptSource={publication.manuscriptSource}
+            onCreateBook={() => formRef.current?.requestSubmit()}
+          />
+        </div>
+      </div>
+    </main>
   );
 }
 
@@ -145,6 +192,7 @@ function RepublishForm({
   calendarType,
   cityName,
   error,
+  formRef,
   gender,
   isLeapMonth,
   isPublishing,
@@ -167,6 +215,7 @@ function RepublishForm({
   calendarType: CalendarType;
   cityName: string;
   error: string | null;
+  formRef: RefObject<HTMLFormElement | null>;
   gender: Gender;
   isLeapMonth: boolean;
   isPublishing: boolean;
@@ -185,12 +234,12 @@ function RepublishForm({
   useLocalMeanTime: boolean;
 }) {
   return (
-    <details className="rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] p-3">
-      <summary className="cursor-pointer text-sm font-black text-[#2f2922]">Dynamic Manse Input</summary>
+    <section className="rounded-[8px] border border-[#d8cdbb] bg-[#fffaf0] p-4 shadow-sm">
+      <h2 className="text-lg font-black text-[#2f2922]">Blueprint Input</h2>
       <p className="mt-2 text-xs leading-5 text-[#8a7b69]">
-        생년월일, 성별, 출생시간, 출생지를 바꾸면 전체 Blueprint Book을 다시 생성합니다.
+        생년월일과 출생시간을 기준으로 Portrait Book을 생성합니다.
       </p>
-      <form className="mt-4 space-y-3" onSubmit={onSubmit}>
+      <form className="mt-5 space-y-3" onSubmit={onSubmit} ref={formRef}>
         <label className="block text-xs font-black text-[#6f6253]">
           이름
           <input className={fieldClassName} onChange={(event) => onNameChange(event.target.value)} value={name} />
@@ -198,7 +247,7 @@ function RepublishForm({
 
         <div className="grid grid-cols-2 gap-2">
           <button
-            className={`h-10 rounded-[2px] border text-xs font-black ${
+            className={`h-10 rounded-[4px] border text-xs font-black ${
               gender === "male" ? "border-[#8a6b2e] bg-[#f7df9c]/70 text-[#2f2922]" : "border-[#d8cdbb] text-[#6f6253]"
             }`}
             onClick={() => onGenderChange("male")}
@@ -207,7 +256,7 @@ function RepublishForm({
             남성
           </button>
           <button
-            className={`h-10 rounded-[2px] border text-xs font-black ${
+            className={`h-10 rounded-[4px] border text-xs font-black ${
               gender === "female" ? "border-[#8a6b2e] bg-[#f7df9c]/70 text-[#2f2922]" : "border-[#d8cdbb] text-[#6f6253]"
             }`}
             onClick={() => onGenderChange("female")}
@@ -239,7 +288,7 @@ function RepublishForm({
               <option value="lunar">음력</option>
             </select>
           </label>
-          <label className="mt-5 flex h-10 items-center gap-2 rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-3 text-xs font-black text-[#6f6253]">
+          <label className="mt-5 flex h-10 items-center gap-2 rounded-[4px] border border-[#d8cdbb] bg-[#fffdf8] px-3 text-xs font-black text-[#6f6253]">
             <input checked={isLeapMonth} onChange={(event) => onIsLeapMonthChange(event.target.checked)} type="checkbox" />
             윤달
           </label>
@@ -256,7 +305,7 @@ function RepublishForm({
               value={birthTime}
             />
           </label>
-          <label className="mt-5 flex h-10 items-center gap-2 rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-3 text-xs font-black text-[#6f6253]">
+          <label className="mt-5 flex h-10 items-center gap-2 rounded-[4px] border border-[#d8cdbb] bg-[#fffdf8] px-3 text-xs font-black text-[#6f6253]">
             <input checked={timeUnknown} onChange={(event) => onTimeUnknownChange(event.target.checked)} type="checkbox" />
             시간 모름
           </label>
@@ -273,20 +322,20 @@ function RepublishForm({
           </select>
         </label>
 
-        <label className="flex items-center gap-2 rounded-[2px] border border-[#d8cdbb] bg-[#fffdf8] px-3 py-2 text-xs font-black text-[#6f6253]">
+        <label className="flex items-center gap-2 rounded-[4px] border border-[#d8cdbb] bg-[#fffdf8] px-3 py-2 text-xs font-black text-[#6f6253]">
           <input checked={useLocalMeanTime} onChange={(event) => onUseLocalMeanTimeChange(event.target.checked)} type="checkbox" />
           지역시 보정 사용
         </label>
 
         <button
-          className="h-11 w-full rounded-[2px] bg-[#2f2922] text-sm font-black text-[#fff8ec] disabled:opacity-50"
+          className="h-11 w-full rounded-[4px] bg-[#2f2922] text-sm font-black text-[#fff8ec] disabled:opacity-50"
           disabled={isPublishing}
           type="submit"
         >
-          {isPublishing ? "다시 출판 중" : "이 명조로 책 다시 출판하기"}
+          {isPublishing ? "책을 쓰는 중..." : "이 명조로 책 만들기"}
         </button>
         {error ? <p className="text-xs font-bold leading-5 text-red-700">{error}</p> : null}
       </form>
-    </details>
+    </section>
   );
 }

@@ -389,19 +389,26 @@ test("Scene composer keeps one scene theme per book while changing chapter scene
   assert.doesNotMatch(sceneLines.join("\n"), /비탈|다리|항구|저울|책상|계단|등불|마루|기둥|모퉁이/);
 });
 
-test("Reader exposes dynamic input and mode boundaries", () => {
+test("Reader exposes simplified Portrait Book MVP UI", () => {
   const readerSource = readFileSync(new URL("../src/components/blueprint/BlueprintReader.tsx", import.meta.url), "utf8");
   const workspaceSource = readFileSync(new URL("../src/components/blueprint/BlueprintClassicalWorkspace.tsx", import.meta.url), "utf8");
 
-  assert.match(workspaceSource, /Dynamic Manse Input/);
-  assert.match(workspaceSource, /생년월일, 성별, 출생시간, 출생지/);
-  assert.match(readerSource, /useState<ReaderMode>\("book"\)/);
-  assert.match(readerSource, /Book Mode/);
-  assert.match(readerSource, /Evidence Mode/);
-  assert.match(readerSource, /Layer 1/);
-  assert.match(readerSource, /사주 원문/);
-  assert.match(readerSource, /Blueprint Interpretation/);
-  assert.match(readerSource, /evidenceMode \? <AppendixView/);
+  assert.match(workspaceSource, /Blueprint Input/);
+  assert.match(workspaceSource, /생년월일과 출생시간을 기준으로 Portrait Book을 생성합니다/);
+  assert.match(workspaceSource, /이 명조로 책 만들기/);
+  assert.match(readerSource, /아직 출판된 책이 없습니다/);
+  assert.match(readerSource, /이 사람의 책을 만들고 있습니다/);
+  assert.match(readerSource, /약 1~2분 정도 소요됩니다/);
+  assert.match(readerSource, /당신의 Portrait Book이 완성되었습니다/);
+  assert.match(readerSource, /책 읽기 시작하기/);
+  assert.match(readerSource, /Cover|PortraitCover/);
+  assert.match(readerSource, /BookCoverCard/);
+  assert.match(readerSource, /Page \{page\.pageNo\}/);
+  assert.match(readerSource, /마지막 당부/);
+  assert.doesNotMatch(readerSource, /Evidence Mode/);
+  assert.doesNotMatch(readerSource, /Runtime Debug JSON/);
+  assert.doesNotMatch(readerSource, /Family Collection/);
+  assert.doesNotMatch(readerSource, /Source:/);
 });
 
 test("Reference Blueprint book keeps chapter structure and sentence-level saju evidence", async () => {

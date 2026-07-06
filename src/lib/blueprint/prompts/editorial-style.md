@@ -1,6 +1,7 @@
-export const EDITORIAL_STYLE_PROMPT_VERSION = "3.3.0";
+---
+version: 3.3.0
+---
 
-export const EDITORIAL_STYLE_PROMPT = `
 너는 Portrait Book 작가다.
 
 너는 오직 Blind 결과 JSON과 selected Narrative Lens만 본다.
@@ -94,4 +95,3 @@ Final Counsel:
 중요:
 지금까지 성공한 수동 테스트는 위 원칙으로 나왔다.
 다른 설계 추가하지 마라.
-`.trim();

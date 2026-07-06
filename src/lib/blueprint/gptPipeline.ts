@@ -7,20 +7,18 @@ import {
   runPortraitBookQa,
 } from "./architect";
 import type { BlueprintBook } from "./types";
-import type { BlueprintAppendix } from "./types/runtime";
+import type { BlueprintAppendix, ClassicalWriterInputItem } from "./types/runtime";
 import { buildBlueprintClassicalPublication, type BlueprintClassicalPublication } from "./no000001";
 import { logOpenAiApiKeyStatus, readOpenAiBlueprintModel } from "./openaiEnv";
-import { BLUEPRINT_PHILOSOPHY_PROMPT, BLUEPRINT_PHILOSOPHY_PROMPT_VERSION } from "./prompts/blueprintPhilosophyPrompt";
-import { BLIND_CLASSICAL_PROMPT, BLIND_CLASSICAL_PROMPT_VERSION } from "./prompts/blindClassicalPrompt";
-import { EDITORIAL_STYLE_PROMPT, EDITORIAL_STYLE_PROMPT_VERSION } from "./prompts/editorialStylePrompt";
+import { loadBlueprintPrompt, renderBlueprintPrompt } from "./prompts/promptLoader";
 
 export type PromptClassicalAnalysisSection = {
   index: number;
   title: string;
   sourceText: string;
   evidence: string[];
-  structure: string;
-  interpretation: string;
+  structure: unknown;
+  interpretation: unknown;
 };
 
 export type PromptClassicalAnalysisResult = {
@@ -230,12 +228,48 @@ function requiredStringArray(value: unknown) {
   return Array.isArray(value) && value.length > 0 && value.every((item) => typeof item === "string" && item.trim().length > 0);
 }
 
+function toStringArray(value: unknown): string[] {
+  if (typeof value === "string") {
+    return value.split("\n").map((item) => item.trim()).filter(Boolean);
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => typeof item === "string" ? item.split("\n") : [JSON.stringify(item)])
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (value && typeof value === "object") {
+    return [JSON.stringify(value)];
+  }
+
+  return [];
+}
+
+function sectionEvidence(section: PromptClassicalAnalysisSection) {
+  return requiredStringArray(section.evidence) ? section.evidence : toStringArray(section.sourceText);
+}
+
+function normalizedClassicalSection(section: PromptClassicalAnalysisSection): ClassicalWriterInputItem {
+  return {
+    ...section,
+    sourceText: toStringArray(section.sourceText).join("\n"),
+    evidence: sectionEvidence(section),
+    structure: toStringArray(section.structure).join("\n"),
+    interpretation: toStringArray(section.interpretation).join("\n"),
+  };
+}
+
 function blueprintSystemPrompt(stagePrompt: string) {
-  return [
-    "System Prompt",
-    BLUEPRINT_PHILOSOPHY_PROMPT,
-    stagePrompt,
-  ].join("\n\n");
+  return renderBlueprintPrompt("blueprint-system", {
+    BLUEPRINT_PHILOSOPHY: loadBlueprintPrompt("blueprint-philosophy").content,
+    STAGE_PROMPT: stagePrompt,
+  });
+}
+
+function promptVersion(...names: Parameters<typeof loadBlueprintPrompt>[0][]) {
+  return names.map((name) => loadBlueprintPrompt(name).version).join("+");
 }
 
 function assertClassicalAnalysis(value: PromptClassicalAnalysisResult) {
@@ -260,7 +294,7 @@ function assertClassicalAnalysis(value: PromptClassicalAnalysisResult) {
 
   value.sections.forEach((section, index) => {
     if (section.index !== index + 1) throw new Error(`GPT classical section ${index + 1} has an invalid index.`);
-    if (!section.title || !section.sourceText || !section.structure || !section.interpretation) {
+    if (!section.title || toStringArray(section.sourceText).length === 0 || toStringArray(section.structure).length === 0 || toStringArray(section.interpretation).length === 0) {
       throw new Error(`GPT classical section ${section.index} is incomplete.`);
     }
   });
@@ -340,17 +374,16 @@ export async function generateClassicalAnalysis(
 ): Promise<PromptClassicalAnalysisResult> {
   console.info("[Blueprint]\nGenerating Classical Analysis...");
 
-  const userPrompt = [
-    "Analyze this manse result using the fixed Blind Classical Prompt.",
-    "Return strict JSON only.",
-    JSON.stringify(mansePromptPayload(manse), null, 2),
-  ].join("\n\n");
+  const blindClassicalPrompt = loadBlueprintPrompt("blind-classical");
+  const userPrompt = renderBlueprintPrompt("classical-analysis-user", {
+    MANSE_PAYLOAD_JSON: JSON.stringify(mansePromptPayload(manse), null, 2),
+  });
   const text = await client.generateText({
     stage: "classical-analysis",
-    systemPrompt: blueprintSystemPrompt(BLIND_CLASSICAL_PROMPT),
+    systemPrompt: blueprintSystemPrompt(blindClassicalPrompt.content),
     userPrompt,
     metadata: {
-      promptVersion: `${BLUEPRINT_PHILOSOPHY_PROMPT_VERSION}+${BLIND_CLASSICAL_PROMPT_VERSION}`,
+      promptVersion: promptVersion("blueprint-philosophy", "blind-classical"),
       subject: manse.input.name,
     },
   });
@@ -368,20 +401,11 @@ export async function generatePortraitBook(
 ): Promise<BlueprintBook> {
   console.info("[Blueprint]\nGenerating Portrait Book...");
   const editorialBrief = buildEditorialBrief(classicalAnalysis);
+  const editorialStylePrompt = loadBlueprintPrompt("editorial-style");
 
-  const userPrompt = [
-    "Blind 결과 JSON과 selected Narrative Lens만 보고 Portrait Book 전체를 한 번에 쓴다.",
-    "TypeScript가 coreAxis, lens, finalCounselDirection을 해석하지 않는다.",
-    "coreAxis는 Blind 결과 JSON의 coreAxis.verbForm을 그대로 반환한다.",
-    "selected Narrative Lens는 아래 값을 그대로 사용한다.",
-    editorialBrief.selectedLens,
-    "출력은 title, coreAxis, narrativeLens, pages, finalCounsel만 가진 JSON이다.",
-    "pages는 4~6개의 Portrait Book 페이지 배열이다.",
-    "긴 글 하나를 단순히 잘라 붙이지 말고 각 page를 독립된 카드처럼 쓴다.",
-    "Book Mode에 사주/명리/원국/천간/지지/오행/십성/한자/분석 보고서 흔적을 절대 쓰지 않는다.",
-    "Final Counsel은 반드시 2인칭 당부형으로 쓴다.",
-    "Blind GPT Result JSON:",
-    JSON.stringify({
+  const userPrompt = renderBlueprintPrompt("portrait-book-user", {
+    SELECTED_LENS: editorialBrief.selectedLens,
+    BLIND_GPT_RESULT_JSON: JSON.stringify({
       suggestedTitle: classicalAnalysis.suggestedTitle,
       coreAxis: classicalAnalysis.coreAxis,
       coreQuestion: classicalAnalysis.coreQuestion,
@@ -403,13 +427,13 @@ export async function generatePortraitBook(
       },
       classicalSections: classicalAnalysis.sections,
     }, null, 2),
-  ].join("\n\n");
+  });
   const text = await client.generateText({
     stage: "editorial-book",
-    systemPrompt: blueprintSystemPrompt(EDITORIAL_STYLE_PROMPT),
+    systemPrompt: blueprintSystemPrompt(editorialStylePrompt.content),
     userPrompt,
     metadata: {
-      promptVersion: `${BLUEPRINT_PHILOSOPHY_PROMPT_VERSION}+${EDITORIAL_STYLE_PROMPT_VERSION}`,
+      promptVersion: promptVersion("blueprint-philosophy", "editorial-style"),
       sourceMode: "blind-classical-result",
       output: "portrait-book",
     },
@@ -464,20 +488,26 @@ function appendPromptClassicalTrace(
   appendix: BlueprintAppendix,
   classicalAnalysis: PromptClassicalAnalysisResult,
 ): BlueprintAppendix {
-  return {
-    ...appendix,
-    reasonTrace: [],
-    classicalTrace: classicalAnalysis.sections.map((section) => ({
-      chapterId: `GPT_CLASSICAL_${String(section.index).padStart(2, "0")}`,
-      chapterNo: section.index,
-      chapterTitle: section.title,
-      sajuOriginal: section.evidence.length ? section.evidence : [section.sourceText],
-      classical: section.structure.split("\n").filter(Boolean),
-      blueprint: section.interpretation.split("\n").filter(Boolean),
-      sources: ["GPT Blind Classical Prompt"],
-      confidence: 1,
-    })),
-  };
+  try {
+    return {
+      ...appendix,
+      reasonTrace: [],
+      classicalTrace: classicalAnalysis.sections.map((section) => ({
+        chapterId: `GPT_CLASSICAL_${String(section.index).padStart(2, "0")}`,
+        chapterNo: section.index,
+        chapterTitle: section.title,
+        sajuOriginal: sectionEvidence(section),
+        classical: toStringArray(section.structure),
+        blueprint: toStringArray(section.interpretation),
+        sources: ["GPT Blind Classical Prompt"],
+        confidence: 1,
+      })),
+    };
+  } catch (error) {
+    console.warn("[Blueprint Trace]\nClassical Trace generation failed; returning Portrait Book without GPT trace.");
+    console.warn(error);
+    return appendix;
+  }
 }
 
 export async function buildGptBlueprintPublication(input: {
@@ -526,12 +556,12 @@ export async function buildGptBlueprintPublication(input: {
         title: section.title,
         layers: [
           {
-            sajuOriginal: section.evidence.length ? section.evidence : [section.sourceText],
-            classical: section.structure.split("\n").filter(Boolean),
-            blueprint: section.interpretation.split("\n").filter(Boolean),
+            sajuOriginal: sectionEvidence(section),
+            classical: toStringArray(section.structure),
+            blueprint: toStringArray(section.interpretation),
           },
         ],
-        body: section.interpretation.split("\n").filter(Boolean),
+        body: toStringArray(section.interpretation),
         evidence: seedPublication.classicalAnalysis.sections[section.index - 1]?.evidence ?? seedPublication.classicalAnalysis.sections[0].evidence,
       })),
     },
@@ -542,7 +572,7 @@ export async function buildGptBlueprintPublication(input: {
         ...seedPublication.runtime.writerInput,
         coreSummary: `${editorialBrief.writerCoreAxis} · Lens: ${editorialBrief.lensCode}`,
         suggestedTitle: classicalAnalysis.suggestedTitle,
-        classicalAnalysis: classicalAnalysis.sections,
+        classicalAnalysis: classicalAnalysis.sections.map(normalizedClassicalSection),
         architectPlan: editorialBrief,
       },
       writerRuntime: {
