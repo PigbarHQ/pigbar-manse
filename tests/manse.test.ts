@@ -6,6 +6,7 @@ import { compileBlindInput } from "../src/lib/blind";
 import { compileFutureInput } from "../src/lib/future";
 import { compileDecisionInput } from "../src/lib/decision";
 import { buildTemplateReaderReport } from "../src/lib/reader";
+import { serviceLabelForDecision } from "../src/lib/reader/serviceLabels";
 
 const place = (
   name: string,
@@ -377,12 +378,83 @@ test("Template Reader creates safe report JSON from Decision compiler without GP
   assert.ok(readerReport.condensedMonthHighlights.length > 0);
   assert.ok(readerReport.condensedMonthHighlights.length <= readerReport.monthHighlights.length);
   assert.ok(readerReport.cautionNotes.includes("Reader는 Decision Compiler에 존재하는 근거 코드만 사용하며, 새로운 판단을 생성하지 않습니다."));
+  const serviceCareer = readerReport.serviceDomainReports.find((report) => report.domain === "career");
+  const serviceHealth = readerReport.serviceDomainReports.find((report) => report.domain === "health");
+  const servicePayload = JSON.stringify({
+    serviceDomainReports: readerReport.serviceDomainReports,
+    serviceMonthlyStrategy: readerReport.serviceMonthlyStrategy,
+    serviceTimingSummary: readerReport.serviceTimingSummary,
+  });
+  const summaryText = readerReport.overallSummary.join("\n");
+
+  assert.ok(serviceCareer);
+  assert.ok(["좋음", "보통", "주의", "기회와 주의"].includes(serviceCareer.label));
+  assert.ok(serviceCareer.stars >= 1 && serviceCareer.stars <= 5);
+  assert.ok(serviceCareer.shortSummary.length > 0);
+  assert.match(serviceCareer.summary, /직장 자체가 나쁘다는 의미는 아닙니다/);
+  assert.ok(serviceCareer.positiveMeanings.some((line) => /직장|책임|역할|권한|평가/.test(line)));
+  assert.equal(serviceCareer.positiveMeanings.length, new Set(serviceCareer.positiveMeanings).size);
+  assert.ok(serviceCareer.cautionMeanings.some((line) => line.includes("계약·규정·문서")));
+  assert.ok(serviceHealth);
+  assert.match(serviceHealth.summary, /건강이 나쁘다는 뜻이 아닙니다/);
+  assert.match(serviceHealth.summary, /의료 전문가의 영역입니다/);
+  assert.equal(readerReport.serviceMonthlyStrategy.length, 12);
+  assert.ok(readerReport.serviceTimingSummary.primaryActiveMonths.length > 0);
+  assert.ok(readerReport.serviceTimingSummary.primaryCautionMonths.length > 0);
+  assert.match(summaryText, new RegExp(readerReport.serviceTimingSummary.activeLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(summaryText, new RegExp(readerReport.serviceTimingSummary.cautionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  readerReport.serviceTimingSummary.primaryActiveMonths.forEach((month) => {
+    assert.ok(readerReport.serviceMonthlyStrategy.some((item) => item.month === month && (item.tone === "ACTIVE" || item.tone === "PREPARE")));
+  });
+  readerReport.serviceTimingSummary.primaryCautionMonths.forEach((month) => {
+    assert.ok(readerReport.serviceMonthlyStrategy.some((item) => item.month === month && item.tone === "CAUTION"));
+  });
+  assert.ok(readerReport.serviceMonthlyStrategy.some((month) => month.tone === "MIXED" && month.goodFor.length > 0 && month.watchFor.length > 0));
+  assert.ok(readerReport.serviceMonthlyStrategy.every((month) => typeof month.month === "number" && typeof month.summary === "string"));
+  assert.doesNotMatch(servicePayload, /[A-Z]{2,}_[A-Z0-9_]+|HIGH_OPPORTUNITY_LOW_RISK|HIGH_OPPORTUNITY_HIGH_RISK|LOW_OPPORTUNITY_HIGH_RISK|opportunityScore|riskScore|readerStatus|evidenceCodes|sourceSignalGroups/);
+  assert.doesNotMatch(servicePayload, /흐름을 세부 신호로 나누어 볼 필요가 있습니다|한쪽으로 단정하기보다|조건 확인과 조율의 관점이 필요합니다/);
 
   const payload = JSON.stringify(readerReport);
   const debugPayload = JSON.stringify(decisionCompiler);
   assert.match(debugPayload, /BUSINESS_OUTPUT_PRESENT/);
   assert.doesNotMatch(payload, /BUSINESS_OUTPUT_PRESENT|HIGH_RELATION_MONTH_7|HEALTH_MISSING_ELEMENT/);
   assert.doesNotMatch(payload, /무조건 해라|반드시 돈 번다|이혼한다|병 걸린다|OpenAI|OPENAI_API_KEY/);
+});
+
+test("Service labels map decision values to user-facing card labels", () => {
+  assert.deepEqual(serviceLabelForDecision({
+    domain: "health",
+    opportunityScore: 40,
+    riskScore: 80,
+    readerStatus: "LOW_OPPORTUNITY_HIGH_RISK",
+  }), {
+    serviceLevel: "CAUTION",
+    label: "주의",
+    stars: 1,
+    shortSummary: "주의 깊게 살펴볼 신호가 강합니다.",
+  });
+
+  const business = serviceLabelForDecision({
+    domain: "business",
+    opportunityScore: 84,
+    riskScore: 35,
+    readerStatus: "HIGH_OPPORTUNITY_LOW_RISK",
+  });
+  assert.equal(business.serviceLevel, "GOOD");
+  assert.equal(business.label, "좋음");
+  assert.ok(business.stars >= 4);
+
+  assert.deepEqual(serviceLabelForDecision({
+    domain: "businessExpansion",
+    opportunityScore: 76,
+    riskScore: 58,
+    readerStatus: "HIGH_OPPORTUNITY_HIGH_RISK",
+  }), {
+    serviceLevel: "MIXED",
+    label: "기회와 주의",
+    stars: 3,
+    shortSummary: "기회와 점검 신호가 함께 있습니다.",
+  });
 });
 
 test("Manse route and UI expose readerReport without GPT or OpenAI coupling", () => {

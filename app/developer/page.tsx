@@ -2,8 +2,9 @@ import { BlueprintClassicalWorkspace } from "@/src/components/blueprint/Blueprin
 import { buildEmptyBlueprintPublication } from "@/src/lib/blueprint/emptyPublication";
 import { blueprintNo000001RuntimeInput } from "@/src/lib/blueprint/runtime";
 
-export default function Home() {
+export default function DeveloperWorkspacePage() {
   const initialPublication = buildEmptyBlueprintPublication(blueprintNo000001RuntimeInput);
 
   return <BlueprintClassicalWorkspace initial={initialPublication} workspace="developer" />;
 }
+

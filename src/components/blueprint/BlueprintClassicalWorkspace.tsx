@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, type ReactNode, type RefObject, useRef, useState } from "react";
+import Link from "next/link";
 import { CITY_OPTIONS, DEFAULT_CURRENT_DATE_TIME } from "@/src/lib/manse/constants";
 import type { BirthPlace, CalendarType, Gender, ManseInput } from "@/src/lib/manse";
 import type { BlueprintBook } from "@/src/lib/blueprint/types";
@@ -36,7 +37,8 @@ type BlueprintPublicationState = {
 type BlueprintUiState = "EXPERIENCE" | "WELCOME" | "ANALYZING" | "RESULT" | "PUBLISHING" | "PUBLISHED" | "READING" | "EDIT";
 type GenerationMode = "sample" | "gpt";
 type WorkspaceMode = "analysis" | "legacy";
-type ResultTab = "summary" | "blind" | "future" | "decision" | "developer";
+type WorkspaceKind = "developer" | "service";
+type ResultTab = "summary" | "blind" | "future" | "decision" | "evidence" | "json" | "rawData" | "prompt";
 
 const defaultGenerationMode: GenerationMode = process.env.NODE_ENV === "production" ? "gpt" : "sample";
 
@@ -58,10 +60,10 @@ function cityNameFromInput(input: ManseInput) {
     : CITY_OPTIONS[0].name;
 }
 
-export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPublicationState }) {
+export function BlueprintClassicalWorkspace({ initial, workspace = "developer" }: { initial: BlueprintPublicationState; workspace?: WorkspaceKind }) {
   const [publication, setPublication] = useState(initial);
   const [uiState, setUiState] = useState<BlueprintUiState>("WELCOME");
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("analysis");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(workspace === "developer" ? "analysis" : "analysis");
   const [resultTab, setResultTab] = useState<ResultTab>("summary");
   const [experienceId, setExperienceId] = useState(DEFAULT_BLUEPRINT_EXPERIENCE.id);
   const [generationMode, setGenerationMode] = useState<GenerationMode>(defaultGenerationMode);
@@ -255,7 +257,8 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
       <main className={`min-h-screen px-4 py-8 sm:px-6 lg:px-8 ${selectedExperience.theme.appBg} ${selectedExperience.theme.stageBg}`}>
         <div className="mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-[520px] items-center justify-center">
           <div className="w-full">
-            {workspaceMode === "analysis" ? (
+            <WorkspaceToggle experience={selectedExperience} workspace={workspace} />
+            {workspace === "developer" && workspaceMode === "analysis" ? (
               <button
                 className={`mb-4 rounded-full px-4 py-2 text-sm font-black transition ${selectedExperience.theme.secondaryButton}`}
                 onClick={() => {
@@ -297,6 +300,13 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
       <main className={`min-h-screen px-4 py-8 sm:px-6 lg:px-8 ${selectedExperience.theme.appBg} ${selectedExperience.theme.stageBg}`}>
         {uiState === "ANALYZING" ? (
           <AnalysisLoadingView experience={selectedExperience} />
+        ) : workspace === "service" ? (
+          <ServiceResultPage
+            debugData={publication.debugData}
+            experience={selectedExperience}
+            onEditInput={() => setUiState("EDIT")}
+            workspace={workspace}
+          />
         ) : (
           <AnalysisResultPage
             debugData={publication.debugData}
@@ -304,6 +314,7 @@ export function BlueprintClassicalWorkspace({ initial }: { initial: BlueprintPub
             onEditInput={() => setUiState("EDIT")}
             onSelectTab={setResultTab}
             selectedTab={resultTab}
+            workspace={workspace}
           />
         )}
       </main>
@@ -404,6 +415,27 @@ function ExperienceSelectionView({
   );
 }
 
+function WorkspaceToggle({ experience, workspace }: { experience: BlueprintExperience; workspace: WorkspaceKind }) {
+  return (
+    <nav className={`mb-4 flex gap-2 rounded-[8px] border p-1 ${experience.theme.subtleSurface}`}>
+      {[
+        { href: "/service", id: "service", label: "Service Workspace" },
+        { href: "/developer", id: "developer", label: "Developer Workspace" },
+      ].map((item) => (
+        <Link
+          className={`flex-1 rounded-[6px] px-3 py-2 text-center text-xs font-black transition ${
+            workspace === item.id ? experience.theme.primaryButton : experience.theme.secondaryButton
+          }`}
+          href={item.href}
+          key={item.id}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -452,28 +484,34 @@ function AnalysisResultPage({
   onEditInput,
   onSelectTab,
   selectedTab,
+  workspace,
 }: {
   debugData: BlueprintDebugData;
   experience: BlueprintExperience;
   onEditInput: () => void;
   onSelectTab: (tab: ResultTab) => void;
   selectedTab: ResultTab;
+  workspace: WorkspaceKind;
 }) {
   const tabs: Array<{ id: ResultTab; label: string }> = [
     { id: "summary", label: "Summary" },
     { id: "blind", label: "Blind" },
     { id: "future", label: "Future" },
     { id: "decision", label: "Decision" },
-    { id: "developer", label: "Developer" },
+    { id: "evidence", label: "Evidence" },
+    { id: "json", label: "JSON" },
+    { id: "rawData", label: "Raw Data" },
+    { id: "prompt", label: "Prompt" },
   ];
 
   return (
     <section className="mx-auto w-full max-w-7xl">
+      <WorkspaceToggle experience={experience} workspace={workspace} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className={`text-xs font-black uppercase tracking-[0.26em] ${experience.theme.accentText}`}>Blueprint Result</p>
+          <p className={`text-xs font-black uppercase tracking-[0.26em] ${experience.theme.accentText}`}>Developer Workspace</p>
           <h1 className={`mt-3 text-3xl font-black sm:text-4xl ${experience.theme.text}`}>분석 결과</h1>
-          <p className={`mt-2 text-sm font-bold ${experience.theme.mutedText}`}>Summary를 먼저 보고, 필요한 근거는 탭에서 확인합니다.</p>
+          <p className={`mt-2 text-sm font-bold ${experience.theme.mutedText}`}>Summary, Blind, Future, Decision, Evidence, JSON, Prompt를 모두 유지합니다.</p>
         </div>
         <button className={`h-10 rounded-[4px] px-4 text-sm font-black ${experience.theme.secondaryButton}`} onClick={onEditInput} type="button">
           입력 수정
@@ -500,7 +538,41 @@ function AnalysisResultPage({
         {selectedTab === "blind" ? <CompilerCards data={debugData.blindCompiler} experience={experience} title="Blind Compiler" /> : null}
         {selectedTab === "future" ? <CompilerCards data={debugData.futureCompiler} experience={experience} title="Future Compiler" /> : null}
         {selectedTab === "decision" ? <DecisionTab data={debugData.decisionCompiler} experience={experience} /> : null}
-        {selectedTab === "developer" ? <DeveloperTab debugData={debugData} experience={experience} /> : null}
+        {selectedTab === "evidence" ? <EvidenceTab debugData={debugData} experience={experience} /> : null}
+        {selectedTab === "json" ? <DeveloperTab debugData={debugData} experience={experience} /> : null}
+        {selectedTab === "rawData" ? <RawDataTab debugData={debugData} experience={experience} /> : null}
+        {selectedTab === "prompt" ? <PromptTab experience={experience} /> : null}
+      </div>
+    </section>
+  );
+}
+
+function ServiceResultPage({
+  debugData,
+  experience,
+  onEditInput,
+  workspace,
+}: {
+  debugData: BlueprintDebugData;
+  experience: BlueprintExperience;
+  onEditInput: () => void;
+  workspace: WorkspaceKind;
+}) {
+  return (
+    <section className="mx-auto w-full max-w-6xl">
+      <WorkspaceToggle experience={experience} workspace={workspace} />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className={`text-xs font-black uppercase tracking-[0.26em] ${experience.theme.accentText}`}>Service Workspace</p>
+          <h1 className={`mt-3 text-3xl font-black sm:text-4xl ${experience.theme.text}`}>Decision Report</h1>
+          <p className={`mt-2 text-sm font-bold ${experience.theme.mutedText}`}>핵심 영역과 시기를 빠르게 읽는 상품 화면입니다.</p>
+        </div>
+        <button className={`h-10 rounded-[4px] px-4 text-sm font-black ${experience.theme.secondaryButton}`} onClick={onEditInput} type="button">
+          다시 분석하기
+        </button>
+      </div>
+      <div className="mt-6">
+        <ServiceReport experience={experience} readerReport={debugData.readerReport} />
       </div>
     </section>
   );
@@ -533,6 +605,284 @@ function SummaryTab({ experience, readerReport }: { experience: BlueprintExperie
       </section>
     </div>
   );
+}
+
+function ServiceReport({ experience, readerReport }: { experience: BlueprintExperience; readerReport?: unknown }) {
+  const report = asRecord(readerReport);
+  const topOpportunities = asRecordArray(report.topOpportunities);
+  const topRisks = asRecordArray(report.topRisks);
+  const domainReports = asRecordArray(report.domainReports);
+  const serviceDomainReports = asRecordArray(report.serviceDomainReports);
+  const timingSummary = asRecord(report.serviceTimingSummary);
+  const visibleServiceReports = keyCardReports(topOpportunities, topRisks, serviceDomainReports);
+  const hiddenServiceReports = serviceDomainReports.filter((item) => !visibleServiceReports.some((visible) => visible.domain === item.domain));
+  const monthlyStrategy = asRecordArray(report.serviceMonthlyStrategy);
+  const activeTiming = monthsFromSummary(timingSummary.primaryActiveMonths, monthlyStrategy);
+  const mixedTiming = monthsFromSummary(timingSummary.primaryMixedMonths, monthlyStrategy);
+  const cautionTiming = monthsFromSummary(timingSummary.primaryCautionMonths, monthlyStrategy);
+  const whyReports = whyReportsFor(visibleServiceReports, serviceDomainReports);
+  const finalSummary = asStringArray(report.overallSummary).slice(0, 3);
+  const disclaimer = asStringArray(report.cautionNotes);
+
+  return (
+    <div className="space-y-5">
+      <ServiceSection experience={experience} index="01" title="Executive Summary">
+        <h2 className={`text-2xl font-black leading-snug ${experience.theme.text}`}>{String(report.headline ?? "분석 결과가 준비되었습니다.")}</h2>
+        <div className={`mt-4 grid gap-2 text-sm font-bold ${experience.theme.mutedText}`}>
+          {finalSummary.map((line) => <p key={line}>{line}</p>)}
+        </div>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="02" title="Key Cards">
+        <div className="grid gap-3 md:grid-cols-2">
+          {visibleServiceReports.map((item) => <ServiceDomainCard experience={experience} item={item} key={String(item.domain)} />)}
+        </div>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="03" title="Year Strategy">
+        <p className={`text-lg font-black leading-8 ${experience.theme.text}`}>{yearStrategyLine(visibleServiceReports, timingSummary)}</p>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="04" title="Core Timing">
+        <div className="grid gap-4 md:grid-cols-3">
+          <TimingStrategyList experience={experience} items={activeTiming} title="활용하기 좋은 달" />
+          <TimingStrategyList experience={experience} items={mixedTiming} title="변화와 점검이 함께 있는 달" />
+          <TimingStrategyList experience={experience} items={cautionTiming} title="점검이 필요한 달" />
+        </div>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="05" title="Why These Results">
+        <div className="grid gap-3 md:grid-cols-2">
+          {whyReports.map((item) => (
+            <WhyCard
+              domainReport={domainReports.find((domain) => domain.domain === item.domain)}
+              experience={experience}
+              item={item}
+              key={String(item.domain)}
+              timingSummary={timingSummary}
+            />
+          ))}
+        </div>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="06" title="More Details">
+        <details className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`}>
+          <summary className={`cursor-pointer text-sm font-black ${experience.theme.text}`}>전체 영역과 12개월 자세히 보기</summary>
+          <div className="mt-5">
+            <p className={`text-sm font-black ${experience.theme.text}`}>전체 영역 카드</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {hiddenServiceReports.map((item) => <ServiceDomainCard experience={experience} item={item} key={String(item.domain)} />)}
+            </div>
+          </div>
+          <div className="mt-6">
+            <p className={`text-sm font-black ${experience.theme.text}`}>전체 12개월</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {monthlyStrategy.map((item) => <MonthlyStrategyCard experience={experience} item={item} key={String(item.month)} />)}
+            </div>
+          </div>
+          <div className="mt-6">
+            <p className={`text-sm font-black ${experience.theme.text}`}>상세 근거 문장</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {visibleServiceReports.map((item) => <WhyCard domainReport={domainReports.find((domain) => domain.domain === item.domain)} experience={experience} item={item} key={String(item.domain)} timingSummary={timingSummary} />)}
+            </div>
+          </div>
+          <Link className={`mt-5 inline-flex h-10 items-center rounded-[4px] px-4 text-sm font-black ${experience.theme.secondaryButton}`} href="/developer">
+            Developer Workspace로 이동
+          </Link>
+        </details>
+      </ServiceSection>
+
+      <ServiceSection experience={experience} index="07" title="Disclaimer">
+        <div className={`grid gap-2 rounded-[8px] border p-4 text-xs font-bold leading-5 ${experience.theme.mutedText} ${experience.theme.subtleSurface}`}>
+          {disclaimer.map((line) => <p key={line}>{line}</p>)}
+        </div>
+        <div className={`mt-5 text-sm font-black leading-6 ${experience.theme.text}`}>
+          <p>{finalNoteLine(visibleServiceReports, timingSummary)}</p>
+        </div>
+      </ServiceSection>
+    </div>
+  );
+}
+
+function keyCardReports(topOpportunities: Record<string, unknown>[], topRisks: Record<string, unknown>[], serviceDomainReports: Record<string, unknown>[]) {
+  const priorityReports = uniqueRecordsByDomain([
+    ...domainReportsFor(topOpportunities, serviceDomainReports).slice(0, 3),
+    ...domainReportsFor(topRisks, serviceDomainReports).slice(0, 2),
+  ]);
+  const hasWealthOrCareer = priorityReports.some((item) => item.domain === "wealth" || item.domain === "career");
+  const wealthOrCareer = ["wealth", "career"]
+    .map((domain) => serviceDomainReports.find((item) => item.domain === domain))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+
+  return uniqueRecordsByDomain([...priorityReports, ...(hasWealthOrCareer ? [] : wealthOrCareer)]).slice(0, 6);
+}
+
+function monthsFromSummary(months: unknown, monthlyStrategy: Record<string, unknown>[]) {
+  const monthNumbers = Array.isArray(months) ? months.filter((month): month is number => typeof month === "number") : [];
+  return monthNumbers
+    .map((month) => monthlyStrategy.find((item) => item.month === month))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function whyReportsFor(visibleReports: Record<string, unknown>[], serviceDomainReports: Record<string, unknown>[]) {
+  const good = visibleReports.filter((item) => item.serviceLevel === "GOOD").slice(0, 2);
+  const caution = visibleReports.find((item) => item.serviceLevel === "CAUTION") ?? serviceDomainReports.find((item) => item.serviceLevel === "CAUTION");
+  return uniqueRecordsByDomain([...good, ...(caution ? [caution] : [])]).slice(0, 3);
+}
+
+function yearStrategyLine(visibleReports: Record<string, unknown>[], timingSummary: Record<string, unknown>) {
+  const goodNames = visibleReports.filter((item) => item.serviceLevel === "GOOD").slice(0, 3).map((item) => String(item.title));
+  const cautionNames = visibleReports.filter((item) => item.serviceLevel === "CAUTION").slice(0, 2).map((item) => String(item.title));
+  const active = String(timingSummary.activeLabel ?? "");
+
+  if (goodNames.length > 0 && cautionNames.length > 0 && active) {
+    return `올해 전략은 ${goodNames.join("·")} 쪽의 활용 신호와 ${cautionNames.join("·")} 관리 신호를 분리해서 읽는 것입니다. ${active} 전후에는 강한 영역을 확인하고, 부담이 큰 달에는 속도보다 조건을 보는 흐름입니다.`;
+  }
+  if (goodNames.length > 0) return `올해 전략은 ${goodNames.join("·")} 쪽의 활용 신호를 중심에 두고, 월별 변동성을 함께 확인하는 것입니다.`;
+  return "올해 전략은 한 영역으로 단정하기보다 핵심 월과 점검 월을 나누어 읽는 것입니다.";
+}
+
+function finalNoteLine(visibleReports: Record<string, unknown>[], timingSummary: Record<string, unknown>) {
+  const goodNames = visibleReports.filter((item) => item.serviceLevel === "GOOD").slice(0, 3).map((item) => String(item.title));
+  const cautionNames = visibleReports.filter((item) => item.serviceLevel === "CAUTION").slice(0, 2).map((item) => String(item.title));
+  const active = String(timingSummary.activeLabel ?? "");
+  const caution = String(timingSummary.cautionLabel ?? "");
+
+  return `Final Note: 올해는 ${goodNames.join("·") || "강한 영역"}의 활용 신호와 ${cautionNames.join("·") || "점검 영역"}의 관리 신호를 함께 보는 해입니다. ${active || "좋은 시기"}와 ${caution || "점검 시기"}를 분리해서 읽는 것이 이 리포트의 핵심입니다.`;
+}
+
+function uniqueRecordsByDomain(items: Record<string, unknown>[]) {
+  const seen = new Set<unknown>();
+  return items.filter((item) => {
+    if (seen.has(item.domain)) return false;
+    seen.add(item.domain);
+    return true;
+  });
+}
+
+function domainReportsFor(summaries: Record<string, unknown>[], serviceDomainReports: Record<string, unknown>[]) {
+  return summaries
+    .map((summary) => serviceDomainReports.find((item) => item.domain === summary.domain))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+}
+
+function ServiceSection({ children, experience, index, title }: { children: ReactNode; experience: BlueprintExperience; index: string; title: string }) {
+  return (
+    <section className={`rounded-[12px] border p-6 ${experience.theme.surface}`}>
+      <div className="mb-5 flex items-center gap-3">
+        <span className={`text-xs font-black uppercase tracking-[0.24em] ${experience.theme.accentText}`}>{index}</span>
+        <h2 className={`text-xl font-black ${experience.theme.text}`}>{title}</h2>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ServiceDomainCard({ experience, item }: { experience: BlueprintExperience; item: Record<string, unknown> }) {
+  return (
+    <article className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className={`font-black ${experience.theme.text}`}>{String(item.title ?? item.domain ?? "-")}</p>
+        <p className={`text-xs font-black ${experience.theme.accentText}`}>{String(item.label ?? "보통")} {starsText(item.stars)}</p>
+      </div>
+      <p className={`mt-3 text-sm font-bold leading-6 ${experience.theme.mutedText}`}>{String(item.shortSummary ?? "")}</p>
+    </article>
+  );
+}
+
+function starsText(value: unknown) {
+  const stars = typeof value === "number" ? Math.max(1, Math.min(5, value)) : 3;
+  return `${"★".repeat(stars)}${"☆".repeat(5 - stars)}`;
+}
+
+function WhyCard({
+  domainReport,
+  experience,
+  item,
+  timingSummary,
+}: {
+  domainReport?: Record<string, unknown>;
+  experience: BlueprintExperience;
+  item: Record<string, unknown>;
+  timingSummary: Record<string, unknown>;
+}) {
+  const bullets = uniqueStrings([...asStringArray(item.positiveMeanings), ...asStringArray(item.cautionMeanings)]).slice(0, 2);
+  const timingLine = whyTimingLine(domainReport, timingSummary);
+
+  return (
+    <article className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`}>
+      <p className={`font-black ${experience.theme.text}`}>{String(item.title ?? item.domain ?? "-")}</p>
+      <div className={`mt-3 grid gap-2 text-sm font-bold leading-6 ${experience.theme.mutedText}`}>
+        {bullets.map((line) => <p key={line}>{line}</p>)}
+        {timingLine ? <p>{timingLine}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+function whyTimingLine(domainReport: Record<string, unknown> | undefined, timingSummary: Record<string, unknown>) {
+  if (!domainReport) return "";
+  const activeMonths = asNumberArray(domainReport.bestMonths).filter((month) => asNumberArray(timingSummary.primaryActiveMonths).includes(month));
+  const mixedMonths = asNumberArray(domainReport.bestMonths).filter((month) => asNumberArray(timingSummary.primaryMixedMonths).includes(month));
+  const cautionMonths = asNumberArray(domainReport.cautionMonths).filter((month) => asNumberArray(timingSummary.primaryCautionMonths).includes(month));
+  const parts: string[] = [];
+
+  if (activeMonths.length > 0) parts.push(`${monthLabel(activeMonths)}에는 활용 신호가 있습니다`);
+  if (mixedMonths.length > 0) parts.push(`${monthLabel(mixedMonths)}에는 변화 검토 신호가 있습니다`);
+  if (cautionMonths.length > 0) parts.push(`${compactMonthLabel(cautionMonths)}에는 점검 신호가 함께 나타납니다`);
+
+  return parts.length > 0 ? `${parts.join(", ")}.` : "";
+}
+
+function asNumberArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
+}
+
+function monthLabel(months: number[]) {
+  return months.map((month) => `${month}월`).join(", ");
+}
+
+function compactMonthLabel(months: number[]) {
+  return months.map((month) => `${month}월`).join("·");
+}
+
+function TimingStrategyList({ experience, items, title }: { experience: BlueprintExperience; items: Record<string, unknown>[]; title: string }) {
+  return (
+    <article className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`}>
+      <p className={`font-black ${experience.theme.text}`}>{title}</p>
+      <div className={`mt-3 grid gap-2 text-sm font-bold ${experience.theme.mutedText}`}>
+        {items.map((item) => <p key={String(item.month)}>{String(item.month)}월 · {String(item.title)} — {String(item.summary)}</p>)}
+        {items.length === 0 ? <p>표시할 시기 신호가 없습니다.</p> : null}
+      </div>
+    </article>
+  );
+}
+
+function MonthlyStrategyCard({ experience, item }: { experience: BlueprintExperience; item: Record<string, unknown> }) {
+  const goodFor = asStringArray(item.goodFor);
+  const watchFor = asStringArray(item.watchFor);
+
+  return (
+    <article className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`}>
+      <p className={`text-xs font-black uppercase tracking-[0.18em] ${experience.theme.accentText}`}>{String(item.month)}월</p>
+      <h3 className={`mt-2 text-lg font-black ${experience.theme.text}`}>{String(item.title ?? "")}</h3>
+      <p className={`mt-3 text-sm font-bold leading-6 ${experience.theme.mutedText}`}>{String(item.summary ?? "")}</p>
+      <div className={`mt-3 grid gap-1 text-xs font-black ${experience.theme.mutedText}`}>
+        {goodFor.length > 0 ? <p>활용: {compactServiceList(goodFor)}</p> : null}
+        {watchFor.length > 0 ? <p>점검: {compactServiceList(watchFor)}</p> : null}
+      </div>
+    </article>
+  );
+}
+
+function compactServiceList(values: string[]) {
+  if (values.length >= 10) return "여러 영역";
+  if (values.length > 5) return `${values.slice(0, 3).join(", ")} 등 여러 영역`;
+  return values.join(", ");
+}
+
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
 }
 
 function SummaryListCard({
@@ -636,6 +986,23 @@ function DecisionTab({ data, experience }: { data?: unknown; experience: Bluepri
   );
 }
 
+function EvidenceTab({ debugData, experience }: { debugData: BlueprintDebugData; experience: BlueprintExperience }) {
+  const decision = asRecord(debugData.decisionCompiler);
+  const future = asRecord(debugData.futureCompiler);
+
+  return (
+    <section>
+      <h2 className={`text-2xl font-black ${experience.theme.text}`}>Evidence</h2>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <DataCard experience={experience} title="decisionEvidence" value={decision.decisionEvidence} />
+        <DataCard experience={experience} title="decisionSummaryIndex" value={decision.decisionSummaryIndex} />
+        <DataCard experience={experience} title="futureEvidence" value={future.futureEvidence} />
+        <DataCard experience={experience} title="monthlyTimingIndex" value={future.monthlyTimingIndex} />
+      </div>
+    </section>
+  );
+}
+
 function DeveloperTab({ debugData, experience }: { debugData: BlueprintDebugData; experience: BlueprintExperience }) {
   return (
     <section className={`rounded-[12px] border p-5 ${experience.theme.surface}`}>
@@ -648,6 +1015,45 @@ function DeveloperTab({ debugData, experience }: { debugData: BlueprintDebugData
           readerReport: debugData.readerReport,
         }, null, 2)}
       </pre>
+    </section>
+  );
+}
+
+function RawDataTab({ debugData, experience }: { debugData: BlueprintDebugData; experience: BlueprintExperience }) {
+  return (
+    <section className={`rounded-[12px] border p-5 ${experience.theme.surface}`}>
+      <p className={`text-xs font-black uppercase tracking-[0.24em] ${experience.theme.accentText}`}>Raw Data</p>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <DataCard experience={experience} title="canonicalManseInput" value={debugData.canonicalManseInput} />
+        <DataCard experience={experience} title="appendix" value={debugData.appendix} />
+        <DataCard experience={experience} title="features" value={debugData.features} />
+        <DataCard experience={experience} title="reasons" value={debugData.reasons} />
+        <DataCard experience={experience} title="writerInput" value={debugData.writerInput} />
+        <DataCard experience={experience} title="writerRuntime" value={debugData.writerRuntime} />
+      </div>
+    </section>
+  );
+}
+
+function PromptTab({ experience }: { experience: BlueprintExperience }) {
+  const promptItems = [
+    "Engine1 Manse 계산",
+    "Blind Compiler facts 생성",
+    "Future Compiler facts 생성",
+    "Decision Compiler scoring",
+    "Template Reader report 생성",
+    "Legacy Book Mode에서만 GPT Prompt 사용",
+  ];
+
+  return (
+    <section className={`rounded-[12px] border p-6 ${experience.theme.surface}`}>
+      <p className={`text-xs font-black uppercase tracking-[0.24em] ${experience.theme.accentText}`}>Prompt</p>
+      <h2 className={`mt-3 text-2xl font-black ${experience.theme.text}`}>Runtime / Prompt Boundary</h2>
+      <div className={`mt-5 grid gap-3 text-sm font-bold ${experience.theme.mutedText}`}>
+        {promptItems.map((item) => (
+          <p className={`rounded-[8px] border p-4 ${experience.theme.subtleSurface}`} key={item}>{item}</p>
+        ))}
+      </div>
     </section>
   );
 }
@@ -846,6 +1252,12 @@ function RepublishForm({
         >
           {isPublishing ? (workspaceMode === "analysis" ? "분석 중..." : "책을 쓰는 중...") : workspaceMode === "analysis" ? "분석하기" : generationMode === "sample" ? "샘플 책 보기" : "이 명조로 책 만들기"}
         </button>
+        <Link
+          className={`flex h-11 w-full items-center justify-center rounded-[4px] text-sm font-black ${experience.theme.secondaryButton}`}
+          href="/welfare-test"
+        >
+          복지혜택 테스트
+        </Link>
         {error ? <p className={`text-xs font-bold leading-5 ${inputTheme.error}`}>{error}</p> : null}
       </form>
     </ExperienceInput>

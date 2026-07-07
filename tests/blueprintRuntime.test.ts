@@ -392,13 +392,46 @@ test("Scene composer keeps one scene theme per book while changing chapter scene
 test("Reader exposes simplified Portrait Book MVP UI", () => {
   const readerSource = readFileSync(new URL("../src/components/blueprint/BlueprintReader.tsx", import.meta.url), "utf8");
   const workspaceSource = readFileSync(new URL("../src/components/blueprint/BlueprintClassicalWorkspace.tsx", import.meta.url), "utf8");
+  const homeSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const servicePageSource = readFileSync(new URL("../app/service/page.tsx", import.meta.url), "utf8");
+  const developerPageSource = readFileSync(new URL("../app/developer/page.tsx", import.meta.url), "utf8");
   const experiencesSource = readFileSync(new URL("../src/lib/blueprint/experiences.ts", import.meta.url), "utf8");
   const readerTemplateSource = readFileSync(new URL("../src/lib/reader/templateReader.ts", import.meta.url), "utf8");
   const sampleBlindSource = readFileSync(new URL("../src/lib/blueprint/fixtures/sampleBlindAnalysis.ts", import.meta.url), "utf8");
   const sampleSource = readFileSync(new URL("../src/lib/blueprint/fixtures/samplePortraitBook.ts", import.meta.url), "utf8");
+  const serviceReportSource = workspaceSource.slice(
+    workspaceSource.indexOf("function ServiceReport"),
+    workspaceSource.indexOf("function keyCardReports"),
+  );
 
   assert.match(workspaceSource, /Blueprint Publishing Experience/);
   assert.match(workspaceSource, /Blueprint Analysis/);
+  assert.match(workspaceSource, /Service Workspace/);
+  assert.match(workspaceSource, /Developer Workspace/);
+  assert.match(workspaceSource, /href: "\/service"/);
+  assert.match(workspaceSource, /href: "\/developer"/);
+  assert.match(workspaceSource, /Decision Report/);
+  assert.match(workspaceSource, /Executive Summary/);
+  assert.match(workspaceSource, /Key Cards/);
+  assert.match(workspaceSource, /Year Strategy/);
+  assert.match(workspaceSource, /Core Timing/);
+  assert.match(workspaceSource, /Why These Results/);
+  assert.match(workspaceSource, /More Details/);
+  assert.match(workspaceSource, /Disclaimer/);
+  assert.match(serviceReportSource, /활용하기 좋은 달/);
+  assert.match(serviceReportSource, /변화와 점검이 함께 있는 달/);
+  assert.match(serviceReportSource, /점검이 필요한 달/);
+  assert.doesNotMatch(serviceReportSource, /title="Opportunity"|title="Risk"|Monthly Strategy|Final Reader|Final Summary/);
+  assert.doesNotMatch(serviceReportSource, /HIGH_OPPORTUNITY_LOW_RISK|HIGH_OPPORTUNITY_HIGH_RISK|MID_OPPORTUNITY_HIGH_RISK|LOW_OPPORTUNITY_HIGH_RISK|opportunityScore|riskScore|readerStatus|evidenceCodes|sourceSignalGroups/);
+  assert.match(workspaceSource, /핵심 영역과 시기를 빠르게 읽는 상품 화면입니다/);
+  assert.match(workspaceSource, /starsText/);
+  assert.match(workspaceSource, /전체 영역과 12개월 자세히 보기/);
+  assert.match(workspaceSource, /serviceDomainReports/);
+  assert.match(workspaceSource, /serviceMonthlyStrategy/);
+  assert.match(workspaceSource, /serviceTimingSummary/);
+  assert.match(workspaceSource, /ServiceDomainCard/);
+  assert.match(workspaceSource, /MonthlyStrategyCard/);
+  assert.match(workspaceSource, /TimingStrategyList/);
   assert.match(workspaceSource, /분석하기/);
   assert.match(workspaceSource, /분석 결과/);
   assert.match(workspaceSource, /Summary/);
@@ -407,15 +440,24 @@ test("Reader exposes simplified Portrait Book MVP UI", () => {
   assert.match(workspaceSource, /Decision/);
   assert.match(workspaceSource, /Developer/);
   assert.match(workspaceSource, /Raw JSON/);
+  assert.match(workspaceSource, /Raw Data/);
   assert.match(workspaceSource, /Legacy Book Mode/);
   assert.match(workspaceSource, /workspaceMode === "analysis"/);
+  assert.match(workspaceSource, /EvidenceTab/);
+  assert.match(workspaceSource, /PromptTab/);
+  assert.match(workspaceSource, /RawDataTab/);
+  assert.match(workspaceSource, /selectedTab === "json"/);
+  assert.match(workspaceSource, /selectedTab === "rawData"/);
   assert.match(workspaceSource, /setUiState\("RESULT"\)/);
-  assert.match(workspaceSource, /highRiskOpportunities/);
   assert.match(workspaceSource, /condensedMonthHighlights/);
   assert.match(workspaceSource, /High-Risk Opportunities/);
   assert.match(readerTemplateSource, /visibleDomainReports/);
   assert.match(readerTemplateSource, /highRiskOpportunities/);
   assert.match(readerTemplateSource, /condensedMonthHighlights/);
+  assert.match(readerTemplateSource, /serviceTimingSummary/);
+  assert.match(homeSource, /workspace="developer"/);
+  assert.match(servicePageSource, /workspace="service"/);
+  assert.match(developerPageSource, /workspace="developer"/);
   assert.match(workspaceSource, /출판식을 먼저 선택합니다/);
   assert.doesNotMatch(workspaceSource, /출판식 선택/);
   assert.doesNotMatch(workspaceSource, /handleExperienceChange/);
