@@ -7,6 +7,7 @@ import {
   longTermCareCodesFor,
   type FacilityType,
 } from "@/src/lib/welfare/ltc-service-type-map";
+import type { LongTermCareEvaluationARecord } from "@/src/lib/welfare/ltc-evaluation-a";
 
 export { FACILITY_TYPES, type FacilityType } from "@/src/lib/welfare/ltc-service-type-map";
 export { FACILITY_TYPE_GROUPS, FACILITY_TYPE_OPTIONS, labelForLongTermCareCode } from "@/src/lib/welfare/ltc-service-type-map";
@@ -41,6 +42,9 @@ export type FacilityDetailBundle = {
   fetchedAt: string;
   longTermAdminSym: string;
   adminPttnCd: string;
+  generalDetail: Record<string, unknown> | null;
+  addressResolution: AddressResolution | null;
+  evaluationA?: LongTermCareEvaluationARecord[];
   sections: FacilityDetailSection[];
 };
 
@@ -75,14 +79,17 @@ export type FacilitySearchInput = {
   sggNm: string;
   facilityType: FacilityType;
   facilityName?: string;
+  includeAcceptanceDetails?: boolean;
 };
 
 const LONG_TERM_CARE_LIST_BASE_URL = "https://apis.data.go.kr/B550928/searchLtcInsttService02";
 const LONG_TERM_CARE_LIST_PATH = "/getLtcInsttSeachList02";
 const LONG_TERM_CARE_LIST_NUM_ROWS = 100;
 const LONG_TERM_CARE_LIST_MAX_PAGES = 5;
-const LONG_TERM_CARE_SERVICE_KIND_DELAY_MS = 500;
-const LONG_TERM_CARE_ACCEPTANCE_DETAIL_DELAY_MS = 100;
+const LONG_TERM_CARE_SERVICE_KIND_DELAY_MS = 100;
+const LONG_TERM_CARE_ACCEPTANCE_DETAIL_DELAY_MS = 10;
+const LONG_TERM_CARE_SERVICE_KIND_CONCURRENCY = 3;
+const LONG_TERM_CARE_ACCEPTANCE_DETAIL_CONCURRENCY = 5;
 const LONG_TERM_CARE_DETAIL_BASE_URL = "https://apis.data.go.kr/B550928/getLtcInsttDetailInfoService02";
 const LONG_TERM_CARE_GENERAL_DETAIL_PATH = "/getGeneralSttusDetailInfoItem02";
 const LONG_TERM_CARE_ACCEPTANCE_DETAIL_PATH = "/getAceptncNmprDetailInfoItem02";
@@ -141,90 +148,419 @@ const ROAD_ADDRESS_FILE_BY_ROAD_CODE_PREFIX: Record<string, string> = {
 export const REGION_CODES: Record<string, { siDoCd: string; siGunGuCdByName: Record<string, string> }> = {
   서울특별시: {
     siDoCd: "11",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      종로구: "110",
+      중구: "140",
+      용산구: "170",
+      성동구: "200",
+      광진구: "215",
+      동대문구: "230",
+      중랑구: "260",
+      성북구: "290",
+      강북구: "305",
+      도봉구: "320",
+      노원구: "350",
+      은평구: "380",
+      서대문구: "410",
+      마포구: "440",
+      양천구: "470",
+      강서구: "500",
+      구로구: "530",
+      금천구: "545",
+      영등포구: "560",
+      동작구: "590",
+      관악구: "620",
+      서초구: "650",
+      강남구: "680",
+      송파구: "710",
+      강동구: "740",
+    },
   },
   부산광역시: {
     siDoCd: "26",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      중구: "110",
+      서구: "140",
+      동구: "170",
+      영도구: "200",
+      부산진구: "230",
+      동래구: "260",
+      남구: "290",
+      북구: "320",
+      해운대구: "350",
+      사하구: "380",
+      금정구: "410",
+      강서구: "440",
+      연제구: "470",
+      수영구: "500",
+      사상구: "530",
+      기장군: "710",
+    },
   },
   대구광역시: {
     siDoCd: "27",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      중구: "110",
+      동구: "140",
+      서구: "170",
+      남구: "200",
+      북구: "230",
+      수성구: "260",
+      달서구: "290",
+      달성군: "710",
+      군위군: "720",
+    },
   },
   인천광역시: {
     siDoCd: "28",
     siGunGuCdByName: {
-      중구: "110",
-      동구: "140",
+      제물포구: "125",
+      영종구: "155",
       미추홀구: "177",
       연수구: "185",
       남동구: "200",
       부평구: "237",
       계양구: "245",
-      서구: "260",
+      서해구: "275",
+      검단구: "290",
       강화군: "710",
       옹진군: "720",
     },
   },
   광주광역시: {
     siDoCd: "29",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      동구: "110",
+      서구: "140",
+      남구: "155",
+      북구: "170",
+      광산구: "200",
+    },
   },
   대전광역시: {
     siDoCd: "30",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      동구: "110",
+      중구: "140",
+      서구: "170",
+      유성구: "200",
+      대덕구: "230",
+    },
   },
   울산광역시: {
     siDoCd: "31",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      중구: "110",
+      남구: "140",
+      동구: "170",
+      북구: "200",
+      울주군: "710",
+    },
   },
   세종특별자치시: {
     siDoCd: "36",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      세종시: "110",
+    },
   },
   경기도: {
     siDoCd: "41",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "수원시 장안구": "111",
+      "수원시 권선구": "113",
+      "수원시 팔달구": "115",
+      "수원시 영통구": "117",
+      "성남시 수정구": "131",
+      "성남시 중원구": "133",
+      "성남시 분당구": "135",
+      의정부시: "150",
+      "안양시 만안구": "171",
+      "안양시 동안구": "173",
+      "부천시 원미구": "192",
+      "부천시 소사구": "194",
+      "부천시 오정구": "196",
+      광명시: "210",
+      평택시: "220",
+      동두천시: "250",
+      "안산시 상록구": "271",
+      "안산시 단원구": "273",
+      "고양시 덕양구": "281",
+      "고양시 일산동구": "285",
+      "고양시 일산서구": "287",
+      과천시: "290",
+      구리시: "310",
+      남양주시: "360",
+      오산시: "370",
+      시흥시: "390",
+      군포시: "410",
+      의왕시: "430",
+      하남시: "450",
+      "용인시 처인구": "461",
+      "용인시 기흥구": "463",
+      "용인시 수지구": "465",
+      파주시: "480",
+      이천시: "500",
+      안성시: "550",
+      김포시: "570",
+      "화성시 만세구": "591",
+      "화성시 효행구": "593",
+      "화성시 병점구": "595",
+      "화성시 동탄구": "597",
+      광주시: "610",
+      양주시: "630",
+      포천시: "650",
+      여주시: "670",
+      연천군: "800",
+      가평군: "820",
+      양평군: "830",
+    },
   },
   강원도: {
-    siDoCd: "42",
-    siGunGuCdByName: {},
+    siDoCd: "51",
+    siGunGuCdByName: {
+      춘천시: "110",
+      원주시: "130",
+      강릉시: "150",
+      동해시: "170",
+      태백시: "190",
+      속초시: "210",
+      삼척시: "230",
+      홍천군: "720",
+      횡성군: "730",
+      영월군: "750",
+      평창군: "760",
+      정선군: "770",
+      철원군: "780",
+      화천군: "790",
+      양구군: "800",
+      인제군: "810",
+      고성군: "820",
+      양양군: "830",
+    },
   },
   강원특별자치도: {
     siDoCd: "51",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      춘천시: "110",
+      원주시: "130",
+      강릉시: "150",
+      동해시: "170",
+      태백시: "190",
+      속초시: "210",
+      삼척시: "230",
+      홍천군: "720",
+      횡성군: "730",
+      영월군: "750",
+      평창군: "760",
+      정선군: "770",
+      철원군: "780",
+      화천군: "790",
+      양구군: "800",
+      인제군: "810",
+      고성군: "820",
+      양양군: "830",
+    },
   },
   충청북도: {
     siDoCd: "43",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "청주시 상당구": "111",
+      "청주시 서원구": "112",
+      "청주시 흥덕구": "113",
+      "청주시 청원구": "114",
+      충주시: "130",
+      제천시: "150",
+      보은군: "720",
+      옥천군: "730",
+      영동군: "740",
+      증평군: "745",
+      진천군: "750",
+      괴산군: "760",
+      음성군: "770",
+      단양군: "800",
+    },
   },
   충청남도: {
     siDoCd: "44",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "천안시 동남구": "131",
+      "천안시 서북구": "133",
+      공주시: "150",
+      보령시: "180",
+      아산시: "200",
+      서산시: "210",
+      논산시: "230",
+      계룡시: "250",
+      당진시: "270",
+      금산군: "710",
+      부여군: "760",
+      서천군: "770",
+      청양군: "790",
+      홍성군: "800",
+      예산군: "810",
+      태안군: "825",
+    },
   },
   전라북도: {
-    siDoCd: "45",
-    siGunGuCdByName: {},
+    siDoCd: "52",
+    siGunGuCdByName: {
+      "전주시 완산구": "111",
+      "전주시 덕진구": "113",
+      군산시: "130",
+      익산시: "140",
+      정읍시: "180",
+      남원시: "190",
+      김제시: "210",
+      완주군: "710",
+      진안군: "720",
+      무주군: "730",
+      장수군: "740",
+      임실군: "750",
+      순창군: "770",
+      고창군: "790",
+      부안군: "800",
+    },
   },
   전북특별자치도: {
     siDoCd: "52",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "전주시 완산구": "111",
+      "전주시 덕진구": "113",
+      군산시: "130",
+      익산시: "140",
+      정읍시: "180",
+      남원시: "190",
+      김제시: "210",
+      완주군: "710",
+      진안군: "720",
+      무주군: "730",
+      장수군: "740",
+      임실군: "750",
+      순창군: "770",
+      고창군: "790",
+      부안군: "800",
+    },
   },
   전라남도: {
     siDoCd: "46",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      목포시: "110",
+      여수시: "130",
+      순천시: "150",
+      나주시: "170",
+      광양시: "230",
+      담양군: "710",
+      곡성군: "720",
+      구례군: "730",
+      고흥군: "740",
+      보성군: "750",
+      화순군: "760",
+      장흥군: "770",
+      강진군: "780",
+      해남군: "790",
+      영암군: "800",
+      무안군: "810",
+      함평군: "820",
+      영광군: "830",
+      장성군: "840",
+      완도군: "850",
+      진도군: "860",
+      신안군: "870",
+    },
   },
   경상북도: {
     siDoCd: "47",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "포항시 남구": "111",
+      "포항시 북구": "113",
+      경주시: "130",
+      김천시: "150",
+      안동시: "170",
+      구미시: "190",
+      영주시: "210",
+      영천시: "230",
+      상주시: "250",
+      문경시: "280",
+      경산시: "290",
+      의성군: "730",
+      청송군: "750",
+      영양군: "760",
+      영덕군: "770",
+      청도군: "820",
+      고령군: "830",
+      성주군: "840",
+      칠곡군: "850",
+      예천군: "900",
+      봉화군: "920",
+      울진군: "930",
+      울릉군: "940",
+    },
   },
   경상남도: {
     siDoCd: "48",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      "창원시 의창구": "121",
+      "창원시 성산구": "123",
+      "창원시 마산합포구": "125",
+      "창원시 마산회원구": "127",
+      "창원시 진해구": "129",
+      진주시: "170",
+      통영시: "220",
+      사천시: "240",
+      김해시: "250",
+      밀양시: "270",
+      거제시: "310",
+      양산시: "330",
+      의령군: "720",
+      함안군: "730",
+      창녕군: "740",
+      고성군: "820",
+      남해군: "840",
+      하동군: "850",
+      산청군: "860",
+      함양군: "870",
+      거창군: "880",
+      합천군: "890",
+    },
   },
   제주특별자치도: {
     siDoCd: "50",
-    siGunGuCdByName: {},
+    siGunGuCdByName: {
+      제주시: "110",
+      서귀포시: "130",
+    },
+  },
+  전남광주통합특별시: {
+    siDoCd: "12",
+    siGunGuCdByName: {
+      목포시: "110",
+      여수시: "130",
+      순천시: "150",
+      나주시: "170",
+      광양시: "190",
+      동구: "210",
+      서구: "240",
+      남구: "270",
+      북구: "300",
+      광산구: "330",
+      담양군: "710",
+      곡성군: "720",
+      구례군: "730",
+      고흥군: "740",
+      보성군: "750",
+      화순군: "760",
+      장흥군: "770",
+      강진군: "780",
+      해남군: "790",
+      영암군: "800",
+      무안군: "810",
+      함평군: "820",
+      영광군: "830",
+      장성군: "840",
+      완도군: "850",
+      진도군: "860",
+      신안군: "870",
+    },
   },
 };
 
@@ -411,6 +747,35 @@ function acceptanceDetailDelayMs() {
   return Number.isFinite(configured) && configured >= 0 ? configured : LONG_TERM_CARE_ACCEPTANCE_DETAIL_DELAY_MS;
 }
 
+function serviceKindConcurrency() {
+  const configured = Number(process.env.LONG_TERM_CARE_SERVICE_KIND_CONCURRENCY);
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : LONG_TERM_CARE_SERVICE_KIND_CONCURRENCY;
+}
+
+function acceptanceDetailConcurrency() {
+  const configured = Number(process.env.LONG_TERM_CARE_ACCEPTANCE_DETAIL_CONCURRENCY);
+  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : LONG_TERM_CARE_ACCEPTANCE_DETAIL_CONCURRENCY;
+}
+
+async function mapInParallelBatches<T, R>(
+  items: T[],
+  batchSize: number,
+  delayBetweenBatchesMs: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  const results: R[] = [];
+  const safeBatchSize = Math.max(1, Math.floor(batchSize));
+
+  for (let start = 0; start < items.length; start += safeBatchSize) {
+    if (start > 0 && delayBetweenBatchesMs > 0) await delay(delayBetweenBatchesMs);
+    const batch = items.slice(start, start + safeBatchSize);
+    const batchResults = await Promise.all(batch.map((item, batchIndex) => mapper(item, start + batchIndex)));
+    results.push(...batchResults);
+  }
+
+  return results;
+}
+
 function phoneFrom(record: Record<string, unknown>) {
   const parts = [pick(record, ["locTelNo_1", "locTelNo1"]), pick(record, ["locTelNo_2", "locTelNo2"]), pick(record, ["locTelNo_3", "locTelNo3"])].filter(Boolean);
   return parts.length > 0 ? parts.join("-") : pick(record, ["telNo", "phone", "locTelNo"]);
@@ -423,11 +788,13 @@ function buildingNoFrom(record: Record<string, unknown>) {
 }
 
 function readableAddressFrom(record: Record<string, unknown>) {
-  const detailAddr = pick(record, ["detailAddr", "addr", "address"]);
+  const detailAddr = pick(record, ["detailAddr"]);
+  const directAddress = pick(record, ["addr", "address", "roadAddr", "roadAddrPart1", "insttAddr", "lctnAddr", "rnAdres"]);
   const roadName = pick(record, ["roadNm", "roadName"]);
   const buildingNo = buildingNoFrom(record);
-  const humanAddress = [roadName, buildingNo, detailAddr].filter(Boolean).join(" ") || detailAddr;
-  return roadName || detailAddr ? humanAddress : "";
+  if (roadName) return [roadName, buildingNo, detailAddr].filter(Boolean).join(" ");
+  if (directAddress && !/^\d/.test(directAddress) && !/^\d+번지/.test(directAddress)) return directAddress;
+  return "";
 }
 
 function codeAddressFrom(record: Record<string, unknown>) {
@@ -463,6 +830,12 @@ function localRoadAddressKey(roadCode: string, buildingMain: string, buildingSub
   return `${roadCode}:${numberText(buildingMain)}:${numberText(buildingSub || "0") || "0"}`;
 }
 
+function isUsableRoadName(roadName: string) {
+  const value = roadName.trim();
+  if (!value || /^\d+$/.test(value)) return false;
+  return /[A-Za-z가-힣]/.test(value);
+}
+
 function parseLocalRoadAddressLine(line: string): LocalRoadAddress | null {
   const fields = line.replace(/\r$/, "").split("|");
   if (fields.length < 17) return null;
@@ -475,7 +848,7 @@ function parseLocalRoadAddressLine(line: string): LocalRoadAddress | null {
   const buildingSub = numberText(fields[13] || "0") || "0";
   const zipNo = fields[16] ?? "";
   const buildingName = fields[22] || fields[21] || "";
-  if (!roadCode || !roadName || !buildingMain) return null;
+  if (!roadCode || !roadName || !buildingMain || !isUsableRoadName(roadName)) return null;
 
   const buildingNo = buildingSub && buildingSub !== "0" ? `${buildingMain}-${buildingSub}` : buildingMain;
   const roadAddress = [siNm, sggNm, roadName, buildingNo].filter(Boolean).join(" ");
@@ -798,16 +1171,28 @@ async function fetchLongTermCareDetailSection(section: typeof LONG_TERM_CARE_DET
   }
 }
 
-export async function fetchFacilityDetailBundle(longTermAdminSym: string, adminPttnCd: string): Promise<FacilityDetailBundle> {
-  const sections = await Promise.all(LONG_TERM_CARE_DETAIL_SECTIONS.map((section) =>
-    fetchLongTermCareDetailSection(section, longTermAdminSym, adminPttnCd),
-  ));
+export async function fetchFacilityDetailBundle(longTermAdminSym: string, adminPttnCd: string, input?: Pick<FacilitySearchInput, "ctpvNm" | "sggNm">): Promise<FacilityDetailBundle> {
+  const [generalDetail, sections] = await Promise.all([
+    fetchLongTermCareGeneralDetail({ longTermAdminSym, adminPttnCd }),
+    Promise.all(LONG_TERM_CARE_DETAIL_SECTIONS.map((section) =>
+      fetchLongTermCareDetailSection(section, longTermAdminSym, adminPttnCd),
+    )),
+  ]);
+  const addressResolution = generalDetail
+    ? await resolveAddress(generalDetail, {
+      ctpvNm: input?.ctpvNm ?? "",
+      sggNm: input?.sggNm ?? "",
+      facilityType: "전체",
+    })
+    : null;
 
   return {
     source: LONG_TERM_CARE_SOURCE,
     fetchedAt: new Date().toISOString(),
     longTermAdminSym,
     adminPttnCd,
+    generalDetail,
+    addressResolution,
     sections,
   };
 }
@@ -829,22 +1214,24 @@ export async function searchFacilityCandidates(input: FacilitySearchInput) {
 
   const codes = regionCodes(input);
   const serviceKindCodes = serviceKindCodesFor(input.facilityType);
-  const rawResults = [];
-
-  for (const [index, serviceKind] of serviceKindCodes.entries()) {
-    if (index > 0) await delay(serviceKindDelayMs());
+  const rawResults = (await mapInParallelBatches(
+    serviceKindCodes,
+    serviceKindConcurrency(),
+    serviceKindDelayMs(),
+    async (serviceKind) => {
     const pages = await fetchLongTermCareListPages({
       siDoCd: codes.siDoCd,
       siGunGuCd: codes.siGunGuCd,
       serviceKind,
       adminNm: input.facilityName?.trim() ?? "",
     });
-    rawResults.push(...pages.map((raw, pageIndex) => ({
+    return pages.map((raw, pageIndex) => ({
       serviceKind,
       pageNo: pageIndex + 1,
       raw,
-    })));
-  }
+    }));
+  },
+  )).flat();
 
   const requestedServiceKindCodes = new Set(serviceKindCodes);
   const records = rawResults.flatMap(({ raw, serviceKind }) =>
@@ -861,11 +1248,19 @@ export async function searchFacilityCandidates(input: FacilitySearchInput) {
     return [`${id}:${sourceCode}`, record] as const;
   })).values());
   const enrichedRecords: Record<string, unknown>[] = [];
-  for (const record of uniqueRecords) {
-    const detailRecord = await fetchLongTermCareGeneralDetail(record);
-    await delay(acceptanceDetailDelayMs());
-    const acceptanceRecord = await fetchLongTermCareAcceptanceDetail(record);
-    enrichedRecords.push(mergeLongTermCareRecord(record, detailRecord, acceptanceRecord));
+  if (input.includeAcceptanceDetails ?? true) {
+    const recordsWithAcceptance = await mapInParallelBatches(
+      uniqueRecords,
+      acceptanceDetailConcurrency(),
+      acceptanceDetailDelayMs(),
+      async (record) => {
+      const acceptanceRecord = await fetchLongTermCareAcceptanceDetail(record);
+      return mergeLongTermCareRecord(record, null, acceptanceRecord);
+    },
+    );
+    enrichedRecords.push(...recordsWithAcceptance);
+  } else {
+    enrichedRecords.push(...uniqueRecords.map((record) => mergeLongTermCareRecord(record, null, null)));
   }
   const items = await Promise.all(enrichedRecords.map(async (record) => {
     const addressResolution = await resolveAddress(record, input);

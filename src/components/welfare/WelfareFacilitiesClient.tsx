@@ -14,6 +14,7 @@ import {
   type FacilityDetailSection,
   type FacilityType,
 } from "@/src/lib/welfare/facilities";
+import type { LongTermCareEvaluationARecord } from "@/src/lib/welfare/ltc-evaluation-a";
 import { longTermCareCodesFor } from "@/src/lib/welfare/ltc-service-type-map";
 
 type SearchState = {
@@ -32,6 +33,10 @@ const DEFAULT_SEARCH: SearchState = {
   validOnly: true,
 };
 
+function sortKoreanNames(names: string[]) {
+  return [...names].sort((left, right) => left.localeCompare(right, "ko-KR"));
+}
+
 export function WelfareFacilitiesClient() {
   const [form, setForm] = useState<SearchState>(DEFAULT_SEARCH);
   const [searched, setSearched] = useState(false);
@@ -43,17 +48,18 @@ export function WelfareFacilitiesClient() {
   const [status, setStatus] = useState("지역과 기관 종류를 선택한 뒤 기관 조회를 눌러주세요.");
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [searchDurationMs, setSearchDurationMs] = useState<number | null>(null);
   const regionLabel = useMemo(() => [form.ctpvNm, form.sggNm].filter(Boolean).join(" "), [form.ctpvNm, form.sggNm]);
-  const requestPreview = useMemo(() => buildRequestPreview(form, selectedItem), [form, selectedItem]);
-  const ctpvOptions = useMemo(() => Object.keys(REGION_CODES), []);
-  const sggOptions = useMemo(() => Object.keys(REGION_CODES[form.ctpvNm]?.siGunGuCdByName ?? {}), [form.ctpvNm]);
+  const requestPreview = useMemo(() => buildRequestPreview(form, selectedItem, searchDurationMs), [form, selectedItem, searchDurationMs]);
+  const ctpvOptions = useMemo(() => sortKoreanNames(Object.keys(REGION_CODES)), []);
+  const sggOptions = useMemo(() => sortKoreanNames(Object.keys(REGION_CODES[form.ctpvNm]?.siGunGuCdByName ?? {})), [form.ctpvNm]);
 
   function updateForm<K extends keyof SearchState>(key: K, value: SearchState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
   function updateCtpv(value: string) {
-    const nextSggOptions = Object.keys(REGION_CODES[value]?.siGunGuCdByName ?? {});
+    const nextSggOptions = sortKoreanNames(Object.keys(REGION_CODES[value]?.siGunGuCdByName ?? {}));
     setForm((current) => ({
       ...current,
       ctpvNm: value,
@@ -75,6 +81,8 @@ export function WelfareFacilitiesClient() {
       const params = new URLSearchParams({
         longTermAdminSym: item.id,
         adminPttnCd: sourceCode,
+        ctpvNm: form.ctpvNm,
+        sggNm: form.sggNm,
       });
       const response = await fetch(`/api/welfare/facilities/long-term-care/detail?${params.toString()}`);
       const data = await response.json();
@@ -86,6 +94,8 @@ export function WelfareFacilitiesClient() {
         fetchedAt: new Date().toISOString(),
         longTermAdminSym: item.id,
         adminPttnCd: sourceCode,
+        generalDetail: null,
+        addressResolution: null,
         sections: [{
           id: "detailError",
           title: "상세조회 오류",
@@ -104,7 +114,20 @@ export function WelfareFacilitiesClient() {
 
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const startedAt = performance.now();
+    if (form.facilityType === "전체" && !form.facilityName.trim()) {
+      setResults([]);
+      setSearched(true);
+      setSelectedKey("");
+      setSelectedItem(null);
+      setDetailBundle(null);
+      setSearchDurationMs(0);
+      setStatus("전체 검색은 조회 범위가 넓습니다. 기관명 일부를 입력한 뒤 조회해주세요.");
+      return;
+    }
+
     setLoading(true);
+    setSearchDurationMs(null);
     setStatus("기관 정보를 조회하고 있습니다.");
     setSelectedKey("");
     setSelectedItem(null);
@@ -125,6 +148,7 @@ export function WelfareFacilitiesClient() {
         ctpvNm: form.ctpvNm,
         sggNm: form.sggNm,
         facilityType: form.facilityType,
+        includeAcceptanceDetails: shouldUseOccupancyFilter(form.facilityType, form.validOnly) ? "true" : "false",
       });
       if (form.facilityName.trim()) params.set("facilityName", form.facilityName.trim());
       const response = await fetch(`/api/welfare/facilities/long-term-care/list?${params.toString()}`);
@@ -133,10 +157,11 @@ export function WelfareFacilitiesClient() {
       if (!response.ok) throw new Error(data.error ?? "기관 조회 실패");
 
       const allItems = Array.isArray(data.items) ? data.items as FacilityCandidate[] : [];
-      const items = form.validOnly ? allItems.filter((item) => (currentOccupancyFrom(item) ?? 0) > 0) : allItems;
+      const appliesOccupancyFilter = shouldUseOccupancyFilter(form.facilityType, form.validOnly);
+      const items = appliesOccupancyFilter ? allItems.filter((item) => (currentOccupancyFrom(item) ?? 0) > 0) : allItems;
       setResults(items);
       setSearched(true);
-      setStatus(form.validOnly
+      setStatus(appliesOccupancyFilter
         ? `유효 기관 ${items.length}개를 표시합니다. 전체 조회 결과는 ${allItems.length}개입니다.`
         : `기관 ${items.length}개를 불러왔습니다.`);
       if (items[0]) void selectFacility(items[0]);
@@ -148,6 +173,7 @@ export function WelfareFacilitiesClient() {
       setSearched(true);
       setStatus(error instanceof Error ? error.message : "기관 조회 중 오류가 발생했습니다.");
     } finally {
+      setSearchDurationMs(Math.round(performance.now() - startedAt));
       setLoading(false);
     }
   }
@@ -328,6 +354,7 @@ type RequestPreview = {
     longTermAdminSym: string;
     adminPttnCd: string;
   } | null;
+  searchDurationMs: number | null;
 };
 
 function RequestPreviewPanel({ preview }: { preview: RequestPreview }) {
@@ -378,13 +405,17 @@ function RequestPreviewPanel({ preview }: { preview: RequestPreview }) {
           ) : (
             <p className="mt-3 rounded-[6px] bg-white p-3 text-xs font-bold text-[#7a4b5f]">검색 결과에서 기관을 선택하면 상세조회 값이 표시됩니다.</p>
           )}
+          <div className="mt-3 rounded-[6px] bg-white p-3 text-xs font-bold text-[#3f2432]">
+            <span className="text-[#a50034]">이번 조회 처리 시간</span>
+            <span className="ml-2">{formatDuration(preview.searchDurationMs)}</span>
+          </div>
         </div>
       </div>
     </section>
   );
 }
 
-function buildRequestPreview(form: SearchState, selectedItem: FacilityCandidate | null): RequestPreview {
+function buildRequestPreview(form: SearchState, selectedItem: FacilityCandidate | null, searchDurationMs: number | null): RequestPreview {
   const region = REGION_CODES[form.ctpvNm];
   const siDoCd = region?.siDoCd ?? "";
   const siGunGuCd = region?.siGunGuCdByName[form.sggNm] ?? "";
@@ -408,7 +439,22 @@ function buildRequestPreview(form: SearchState, selectedItem: FacilityCandidate 
       longTermAdminSym: selectedItem.id,
       adminPttnCd: selectedSourceCode,
     } : null,
+    searchDurationMs,
   };
+}
+
+function formatDuration(durationMs: number | null) {
+  if (durationMs === null) return "아직 조회 전";
+  if (durationMs < 1000) return `${durationMs}ms`;
+  return `${(durationMs / 1000).toFixed(1)}초`;
+}
+
+function shouldUseOccupancyFilter(facilityType: FacilityType, validOnly: boolean) {
+  return validOnly && facilityType !== "복지용구" && facilityType !== "단기보호";
+}
+
+function shouldShowOccupancy(facilityType: FacilityType) {
+  return facilityType !== "복지용구" && facilityType !== "단기보호";
 }
 
 function FacilityListItem({ item, onSelect, selected }: { item: FacilityCandidate; onSelect: () => void; selected: boolean }) {
@@ -416,8 +462,11 @@ function FacilityListItem({ item, onSelect, selected }: { item: FacilityCandidat
   const sourceKindName = typeof raw.sourceKindName === "string" ? raw.sourceKindName : "";
   const sourceCode = sourceCodeOf(item);
   const sourceKindLabel = sourceKindName || (sourceCode ? labelForLongTermCareCode(sourceCode) : "");
-  const currentOccupancy = currentOccupancyFrom(item);
-  const isEmptyOccupancy = currentOccupancy === 0;
+  const showOccupancy = shouldShowOccupancy(item.facilityType);
+  const currentOccupancy = showOccupancy ? currentOccupancyFrom(item) : null;
+  const isEmptyOccupancy = showOccupancy && currentOccupancy === 0;
+  const evaluationA = evaluationAFromItem(item);
+  const evaluationSummary = evaluationASummary(evaluationA);
   const cardClass = selected
     ? isEmptyOccupancy
       ? "border-[#8a8f98] bg-[#f1f2f4]"
@@ -439,11 +488,13 @@ function FacilityListItem({ item, onSelect, selected }: { item: FacilityCandidat
         <span className={badgeClass}>{item.facilityType}</span>
         {sourceKindLabel ? <span className={badgeClass}>{sourceKindLabel}</span> : null}
         {currentOccupancy !== null ? <span className={badgeClass}>현원 {currentOccupancy}명</span> : null}
+        {evaluationA.length > 0 ? <span className={badgeClass}>평가 우수 {evaluationSummary.maxCount}회</span> : null}
       </div>
       <p className={`mt-3 text-[11px] font-black ${isEmptyOccupancy ? "text-[#6d737c]" : "text-[#a50034]"}`}>기관명</p>
       <h3 className={`mt-1 text-base font-black ${isEmptyOccupancy ? "text-[#555b64]" : "text-[#2f1724]"}`}>{item.name}</h3>
-      <p className={`mt-2 text-xs font-bold leading-5 ${isEmptyOccupancy ? "text-[#6d737c]" : "text-[#7a4b5f]"}`}>{item.address || "주소 확인 필요"}</p>
-      <p className={`mt-1 text-xs font-bold ${isEmptyOccupancy ? "text-[#6d737c]" : "text-[#7a4b5f]"}`}>{item.phone || "전화번호 확인 필요"}</p>
+      {evaluationA.length > 0 ? (
+        <p className="mt-2 text-xs font-black text-[#a50034]">평가 우수 이력: {evaluationSummary.benefitTypes || "장기요양기관"}</p>
+      ) : null}
     </button>
   );
 }
@@ -460,7 +511,7 @@ function FacilityDetailPanel({ detailBundle, detailLoading, item }: { detailBund
 
   return (
     <section className="rounded-[10px] border border-[#e186ad]/65 bg-white p-4">
-      <FacilityOverview item={item} />
+      <FacilityOverview detailBundle={detailBundle} item={item} />
       <div className="mt-5 border-t border-[#e186ad]/35 pt-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -485,15 +536,25 @@ function FacilityDetailPanel({ detailBundle, detailLoading, item }: { detailBund
   );
 }
 
-function FacilityOverview({ item }: { item: FacilityCandidate }) {
+function FacilityOverview({ detailBundle, item }: { detailBundle: FacilityDetailBundle | null; item: FacilityCandidate }) {
   const raw = item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw as Record<string, unknown> : {};
   const sourceKindName = typeof raw.sourceKindName === "string" ? raw.sourceKindName : "";
   const rawList = raw.rawList && typeof raw.rawList === "object" && !Array.isArray(raw.rawList) ? raw.rawList as Record<string, unknown> : {};
-  const rawDetail = raw.rawGeneralDetail && typeof raw.rawGeneralDetail === "object" && !Array.isArray(raw.rawGeneralDetail) ? raw.rawGeneralDetail as Record<string, unknown> : {};
-  const addressResolution = raw.addressResolution && typeof raw.addressResolution === "object" && !Array.isArray(raw.addressResolution) ? raw.addressResolution as Record<string, unknown> : {};
+  const bundledGeneralDetail = detailBundle?.generalDetail && typeof detailBundle.generalDetail === "object" && !Array.isArray(detailBundle.generalDetail)
+    ? detailBundle.generalDetail
+    : {};
+  const rawDetail = Object.keys(bundledGeneralDetail).length > 0
+    ? bundledGeneralDetail
+    : raw.rawGeneralDetail && typeof raw.rawGeneralDetail === "object" && !Array.isArray(raw.rawGeneralDetail) ? raw.rawGeneralDetail as Record<string, unknown> : {};
+  const bundledAddressResolution = detailBundle?.addressResolution && typeof detailBundle.addressResolution === "object" && !Array.isArray(detailBundle.addressResolution)
+    ? detailBundle.addressResolution as Record<string, unknown>
+    : {};
+  const listAddressResolution = raw.addressResolution && typeof raw.addressResolution === "object" && !Array.isArray(raw.addressResolution) ? raw.addressResolution as Record<string, unknown> : {};
+  const addressResolution = Object.keys(bundledAddressResolution).length > 0 ? bundledAddressResolution : listAddressResolution;
   const detailStatus = Object.keys(rawDetail).length > 0 ? "일반현황 상세조회 반영" : "목록조회 기준";
   const sourceCode = rawTextFrom(rawDetail, rawList, raw, "adminPttnCd", "serviceKind", "sourceCode");
   const addressSource = typeof addressResolution.source === "string" ? addressResolution.source : "";
+  const resolvedAddress = rawTextFromRecord(addressResolution, "address");
 
   function rawText(...names: string[]) {
     for (const name of names) {
@@ -506,6 +567,22 @@ function FacilityOverview({ item }: { item: FacilityCandidate }) {
 
   const originalTypeName = sourceKindName || "확인 필요";
   const originalTypeCodeLabel = sourceCode ? labelForLongTermCareCode(sourceCode) : originalTypeName;
+  const detailAddress = firstAddress(
+    resolvedAddress,
+    overviewAddressFrom(rawDetail),
+    overviewAddressFrom(rawList),
+    overviewAddressFrom(raw),
+    item.address,
+  );
+  const detailPhone = firstText(
+    overviewPhoneFrom(rawDetail),
+    overviewPhoneFrom(rawList),
+    overviewPhoneFrom(raw),
+    item.phone,
+  );
+  const evaluationA = evaluationAFromDetailBundle(detailBundle);
+  const listEvaluationA = evaluationAFromItem(item);
+  const displayedEvaluationA = evaluationA.length > 0 ? evaluationA : listEvaluationA;
 
   return (
     <article>
@@ -526,12 +603,12 @@ function FacilityOverview({ item }: { item: FacilityCandidate }) {
       <dl className="mt-4 grid gap-2 text-sm font-bold text-[#3f2432] sm:grid-cols-2">
         <div>
           <dt className="text-xs font-black text-[#a50034]">주소</dt>
-          <dd>{item.address || "-"}</dd>
+          <dd>{detailAddress || "-"}</dd>
           {addressSource ? <dd className="mt-1 text-xs text-[#7a4b5f]">주소 출처: {addressSourceLabel(addressSource)}</dd> : null}
         </div>
         <div>
           <dt className="text-xs font-black text-[#a50034]">전화번호</dt>
-          <dd>{item.phone || "-"}</dd>
+          <dd>{detailPhone || "-"}</dd>
         </div>
         <div>
           <dt className="text-xs font-black text-[#a50034]">기관기호</dt>
@@ -546,14 +623,148 @@ function FacilityOverview({ item }: { item: FacilityCandidate }) {
           <dd>{[rawText("longTermPeribRgtDt"), rawText("stpRptDt")].filter(Boolean).join(" / ") || "-"}</dd>
         </div>
       </dl>
+      <EvaluationASection records={displayedEvaluationA} />
       <details className="mt-4 rounded-[8px] border border-[#e186ad]/45 bg-[#fff7fb] p-3">
         <summary className="cursor-pointer text-xs font-black text-[#a50034]">상세 원자료 보기</summary>
         <pre className="mt-3 max-h-80 overflow-auto rounded-[6px] bg-white p-3 text-[11px] font-bold leading-5 text-[#5f3145]">
-          {JSON.stringify({ list: rawList, generalDetail: rawDetail, addressResolution }, null, 2)}
+          {JSON.stringify({ list: rawList, generalDetail: rawDetail, addressResolution, evaluationA: displayedEvaluationA }, null, 2)}
         </pre>
       </details>
     </article>
   );
+}
+
+function EvaluationASection({ records }: { records: LongTermCareEvaluationARecord[] }) {
+  if (records.length === 0) return null;
+
+  return (
+    <section className="mt-4 rounded-[8px] border border-[#e186ad]/55 bg-[#fff7fb] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a50034]">Evaluation</p>
+          <h4 className="mt-1 text-base font-black text-[#a50034]">평가 우수 이력</h4>
+        </div>
+        <span className="rounded-full border border-[#e186ad]/65 bg-white px-3 py-1 text-xs font-black text-[#a50034]">
+          A등급 5회 이상
+        </span>
+      </div>
+      <p className="mt-2 text-sm font-bold leading-6 text-[#7a4b5f]">
+        국민건강보험공단 장기요양기관 평가 자료에서 기관기호가 매칭된 이력입니다.
+      </p>
+      <div className="mt-3 grid gap-2">
+        {records.map((record, index) => (
+          <div className="rounded-[8px] bg-white p-3 text-sm font-bold text-[#3f2432]" key={`${record.facilitySymbol}:${record.benefitType}:${index}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[#a50034]">{record.benefitType || "장기요양기관"}</span>
+              <span className="rounded-full bg-[#fff0f6] px-2 py-1 text-xs font-black text-[#a50034]">A등급 {record.aGradeCount}회</span>
+            </div>
+            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-black text-[#a50034]">평가 주기</dt>
+                <dd>{record.cycle || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-black text-[#a50034]">평가 연도</dt>
+                <dd>{yearGradesText(record) || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-black text-[#a50034]">자료상 기관명</dt>
+                <dd>{record.facilityName || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-black text-[#a50034]">기관기호</dt>
+                <dd>{record.facilitySymbol || "-"}</dd>
+              </div>
+            </dl>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function overviewAddressFrom(record: Record<string, unknown>) {
+  const direct = rawTextFromRecord(record, "addr", "address", "detailAddr", "roadAddr", "roadAddrPart1", "insttAddr", "lctnAddr", "rnAdres");
+  if (direct) return direct;
+
+  const roadName = rawTextFromRecord(record, "roadNm", "roadName");
+  const buildingMain = rawTextFromRecord(record, "gunmulMlno", "buildingMain");
+  const buildingSub = rawTextFromRecord(record, "gunmulSlno", "buildingSub");
+  const buildingNo = [buildingMain, buildingSub && buildingSub !== "0" ? buildingSub : ""].filter(Boolean).join("-");
+  return roadName ? [roadName, buildingNo].filter(Boolean).join(" ") : "";
+}
+
+function evaluationAFromItem(item: FacilityCandidate) {
+  const raw = item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw as Record<string, unknown> : {};
+  return evaluationAFromUnknown(raw.evaluationA);
+}
+
+function evaluationAFromDetailBundle(detailBundle: FacilityDetailBundle | null) {
+  return evaluationAFromUnknown(detailBundle?.evaluationA);
+}
+
+function evaluationAFromUnknown(value: unknown): LongTermCareEvaluationARecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isEvaluationARecord);
+}
+
+function isEvaluationARecord(value: unknown): value is LongTermCareEvaluationARecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as LongTermCareEvaluationARecord).facilitySymbol === "string";
+}
+
+function evaluationASummary(records: LongTermCareEvaluationARecord[]) {
+  const maxCount = records.reduce((max, record) => Math.max(max, Number(record.aGradeCount) || 0), 0);
+  const benefitTypes = Array.from(new Set(records.map((record) => record.benefitType).filter(Boolean))).slice(0, 3).join(", ");
+  return { maxCount, benefitTypes };
+}
+
+function yearGradesText(record: LongTermCareEvaluationARecord) {
+  return Object.entries(record.yearGrades ?? {})
+    .filter(([, grade]) => String(grade).trim())
+    .map(([year, grade]) => `${year}년 ${grade}`)
+    .join(" · ");
+}
+
+function overviewPhoneFrom(record: Record<string, unknown>) {
+  const direct = rawTextFromRecord(record, "telNo", "phone", "locTelNo");
+  if (direct) return direct;
+
+  const parts = [
+    rawTextFromRecord(record, "locTelNo_1", "locTelNo1"),
+    rawTextFromRecord(record, "locTelNo_2", "locTelNo2"),
+    rawTextFromRecord(record, "locTelNo_3", "locTelNo3"),
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join("-") : "";
+}
+
+function rawTextFromRecord(record: Record<string, unknown>, ...names: string[]) {
+  for (const name of names) {
+    const value = record[name];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return "";
+}
+
+function firstText(...values: string[]) {
+  return values.find((value) => value.trim()) ?? "";
+}
+
+function isDisplayableAddress(value: string) {
+  const address = value.trim();
+  if (!address) return false;
+  if (!/[가-힣]/.test(address)) return false;
+  if (/^\d/.test(address) && /번지/.test(address)) return false;
+  if (/^\d[\d\s\-번지호]+[가-힣]?$/.test(address)) return false;
+  return true;
+}
+
+function firstAddress(...values: string[]) {
+  return values.find(isDisplayableAddress) ?? "";
 }
 
 function currentOccupancyFrom(item: FacilityCandidate) {

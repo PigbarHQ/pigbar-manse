@@ -6,6 +6,7 @@ import test from "node:test";
 import { GET as analyzeWelfareAttachment } from "../app/api/welfare/attachment/analyze/route";
 import { GET as fetchLongTermCareFacilityDetail } from "../app/api/welfare/facilities/long-term-care/detail/route";
 import { GET as searchLongTermCareFacilities } from "../app/api/welfare/facilities/long-term-care/list/route";
+import { evaluationAForLongTermAdminSym, normalizeLongTermCareFacilityKey } from "../src/lib/welfare/ltc-evaluation-a";
 import { longTermCareCodesFor } from "../src/lib/welfare/ltc-service-type-map";
 import { fetchLocalWelfareDetail, fetchLocalWelfareList, fetchNationalWelfareDetail, fetchNationalWelfareList, parseXmlToJson, WelfareApiError } from "../src/lib/welfare/national";
 
@@ -34,6 +35,16 @@ test("Long-term care 전체 facility type expands to all known LTC serviceKind c
     "S41",
   ]);
   assert.equal(longTermCareCodesFor("전체").includes(""), false);
+});
+
+test("Long-term care evaluation A index maps facility symbol as lookup key", () => {
+  const records = evaluationAForLongTermAdminSym("11144000012");
+
+  assert.equal(records.length > 0, true);
+  assert.equal(records[0].facilitySymbol, "1-11440-00012");
+  assert.equal(normalizeLongTermCareFacilityKey(records[0].facilitySymbol), "11144000012");
+  assert.equal(records[0].facilityName, "시립서부노인전문요양센터");
+  assert.equal(records[0].aGradeCount, 6);
 });
 
 test("Welfare XML parser and normalizer create list response without exposing service key to UI", async () => {
@@ -618,6 +629,7 @@ test("Long-term care facility detail route calls all NHIS detail APIs by facilit
   assert.equal(response.status, 200);
   assert.equal(data.longTermAdminSym, "22817700001");
   assert.equal(data.adminPttnCd, "C03");
+  assert.equal(data.generalDetail.longTermAdminSym, "22817700001");
   assert.equal(data.sections.length, 8);
   assert.deepEqual(data.sections.map((section: { endpoint: string }) => section.endpoint), [
     "/getInsttEtcDetailInfoItem02",
@@ -630,10 +642,39 @@ test("Long-term care facility detail route calls all NHIS detail APIs by facilit
     "/getProgramSttusDetailInfoList02",
   ]);
   assert.equal(data.sections.find((section: { id: string }) => section.id === "programStatus").items[0].programTitle, "인지활동 프로그램");
-  assert.equal(calledUrls.length, 8);
+  assert.equal(calledUrls.length, 9);
+  assert.equal(calledUrls.some((url) => url.pathname.endsWith("/getLtcInsttDetailInfoService02/getGeneralSttusDetailInfoItem02")), true);
   assert.equal(calledUrls.every((url) => url.searchParams.get("longTermAdminSym") === "22817700001"), true);
   assert.equal(calledUrls.every((url) => url.searchParams.get("adminPttnCd") === "C03"), true);
   assert.equal(calledUrls.every((url) => url.searchParams.get("serviceKey") === "test-secret-key"), true);
+
+  process.env.DATA_GO_KR_SERVICE_KEY = previousKey;
+});
+
+test("Long-term care facility detail route attaches evaluation A records by facility symbol", async () => {
+  const previousKey = process.env.DATA_GO_KR_SERVICE_KEY;
+  process.env.DATA_GO_KR_SERVICE_KEY = "test-secret-key";
+
+  globalThis.fetch = (async () => new Response(`
+    <response>
+      <body>
+        <item>
+          <longTermAdminSym>11144000012</longTermAdminSym>
+          <adminPttnCd>A03</adminPttnCd>
+          <adminNm>시립서부노인전문요양센터</adminNm>
+        </item>
+      </body>
+    </response>
+  `)) as typeof fetch;
+
+  const response = await fetchLongTermCareFacilityDetail(new Request("http://localhost/api/welfare/facilities/long-term-care/detail?longTermAdminSym=11144000012&adminPttnCd=A03"));
+  const data = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(data.evaluationA.length > 0, true);
+  assert.equal(data.evaluationA[0].facilitySymbol, "1-11440-00012");
+  assert.equal(normalizeLongTermCareFacilityKey(data.evaluationA[0].facilitySymbol), "11144000012");
+  assert.equal(data.evaluationA[0].facilityName, "시립서부노인전문요양센터");
 
   process.env.DATA_GO_KR_SERVICE_KEY = previousKey;
 });
@@ -702,6 +743,13 @@ test("Long-term care facilities route calls NHIS list API and normalizes facilit
               <adminNm>미추홀 주야간보호센터</adminNm>
               <siDoCd>28</siDoCd>
               <siGunGuCd>177</siGunGuCd>
+              <hmPostNo>22100</hmPostNo>
+              <roadNmCd>281771000000</roadNmCd>
+              <gunmulMlno>15</gunmulMlno>
+              <gunmulSlno>2</gunmulSlno>
+              <locTelNo_1>032</locTelNo_1>
+              <locTelNo_2>123</locTelNo_2>
+              <locTelNo_3>4567</locTelNo_3>
             </item>
             <item>
               <longTermAdminSym>22817700002</longTermAdminSym>
@@ -718,6 +766,10 @@ test("Long-term care facilities route calls NHIS list API and normalizes facilit
               <adminNm>미추홀 주야간보호센터</adminNm>
               <siDoCd>28</siDoCd>
               <siGunGuCd>177</siGunGuCd>
+              <detailAddr>371번지 11호</detailAddr>
+              <roadNmCd>281771000000</roadNmCd>
+              <gunmulMlno>15</gunmulMlno>
+              <gunmulSlno>2</gunmulSlno>
             </item>
           </items>
         </body>
@@ -742,7 +794,7 @@ test("Long-term care facilities route calls NHIS list API and normalizes facilit
   assert.equal(data.items[0].region, "인천광역시 미추홀구");
   assert.equal(data.items[0].address, "우편번호 22100 / 도로명코드 281771000000 / 건물번호 15-2");
   assert.equal(data.items[0].phone, "032-123-4567");
-  assert.equal(calledUrls.length, 4);
+  assert.equal(calledUrls.length, 3);
   assert.equal(calledUrls[0].pathname.endsWith("/searchLtcInsttService02/getLtcInsttSeachList02"), true);
   assert.equal(calledUrls[0].searchParams.get("siDoCd"), "28");
   assert.equal(calledUrls[0].searchParams.get("siGunGuCd"), "177");
@@ -751,12 +803,10 @@ test("Long-term care facilities route calls NHIS list API and normalizes facilit
   assert.equal(calledUrls[0].searchParams.get("numOfRows"), "100");
   assert.equal(calledUrls[1].searchParams.get("serviceKind"), "C03");
   assert.equal(calledUrls[1].searchParams.get("adminNm"), "미추홀");
-  assert.equal(calledUrls[2].pathname.endsWith("/getLtcInsttDetailInfoService02/getGeneralSttusDetailInfoItem02"), true);
+  assert.equal(calledUrls.some((url) => url.pathname.endsWith("/getLtcInsttDetailInfoService02/getGeneralSttusDetailInfoItem02")), false);
+  assert.equal(calledUrls[2].pathname.endsWith("/getLtcInsttDetailInfoService02/getAceptncNmprDetailInfoItem02"), true);
   assert.equal(calledUrls[2].searchParams.get("longTermAdminSym"), "22817700001");
   assert.equal(calledUrls[2].searchParams.get("adminPttnCd"), "C03");
-  assert.equal(calledUrls[3].pathname.endsWith("/getLtcInsttDetailInfoService02/getAceptncNmprDetailInfoItem02"), true);
-  assert.equal(calledUrls[3].searchParams.get("longTermAdminSym"), "22817700001");
-  assert.equal(calledUrls[3].searchParams.get("adminPttnCd"), "C03");
   assert.equal(calledUrls[0].searchParams.get("serviceKey"), "test-secret-key");
 
   process.env.DATA_GO_KR_SERVICE_KEY = previousKey;
@@ -793,7 +843,7 @@ test("Long-term care facilities route fetches additional pages when totalCount e
             <item>
               <longTermAdminSym>${id}</longTermAdminSym>
               <adminPttnCd>C05</adminPttnCd>
-              <adminNm>동구 방문간호 ${id}</adminNm>
+              <adminNm>제물포구 방문간호 ${id}</adminNm>
             </item>
           </body>
         </response>
@@ -815,7 +865,7 @@ test("Long-term care facilities route fetches additional pages when totalCount e
               <longTermAdminSym>${itemId}</longTermAdminSym>
               <serviceKind>C05</serviceKind>
               <adminPttnCd>C05</adminPttnCd>
-              <adminNm>동구 방문간호 ${pageNo}</adminNm>
+              <adminNm>제물포구 방문간호 ${pageNo}</adminNm>
               <siDoCd>28</siDoCd>
               <siGunGuCd>140</siGunGuCd>
             </item>
@@ -825,7 +875,7 @@ test("Long-term care facilities route fetches additional pages when totalCount e
     `);
   }) as typeof fetch;
 
-  const response = await searchLongTermCareFacilities(new Request("http://localhost/api/welfare/facilities/long-term-care/list?ctpvNm=인천광역시&sggNm=동구&facilityType=방문간호"));
+  const response = await searchLongTermCareFacilities(new Request("http://localhost/api/welfare/facilities/long-term-care/list?ctpvNm=인천광역시&sggNm=제물포구&facilityType=방문간호"));
   const data = await response.json();
   const calledUrls = calls.map((call) => new URL(call));
   const listCalls = calledUrls.filter((url) => url.pathname.endsWith("/searchLtcInsttService02/getLtcInsttSeachList02"));
@@ -895,6 +945,9 @@ test("Long-term care facilities route resolves Incheon road address from local r
               <adminNm>미추홀 주야간보호센터</adminNm>
               <siDoCd>28</siDoCd>
               <siGunGuCd>177</siGunGuCd>
+              <roadNmCd>281771000000</roadNmCd>
+              <gunmulMlno>15</gunmulMlno>
+              <gunmulSlno>2</gunmulSlno>
             </item>
           </items>
         </body>
@@ -968,6 +1021,9 @@ test("Long-term care facilities route resolves other regions from matching local
               <adminPttnCd>C01</adminPttnCd>
               <adminNm>부산 방문요양센터</adminNm>
               <siDoCd>26</siDoCd>
+              <roadNmCd>261101000000</roadNmCd>
+              <gunmulMlno>7</gunmulMlno>
+              <gunmulSlno>0</gunmulSlno>
             </item>
           </items>
         </body>
@@ -1062,6 +1118,9 @@ test("Long-term care facilities route enriches code-only address with Juso searc
               <adminNm>미추홀 주야간보호센터</adminNm>
               <siDoCd>28</siDoCd>
               <siGunGuCd>177</siGunGuCd>
+              <roadNmCd>281771000000</roadNmCd>
+              <gunmulMlno>15</gunmulMlno>
+              <gunmulSlno>2</gunmulSlno>
             </item>
           </items>
         </body>
