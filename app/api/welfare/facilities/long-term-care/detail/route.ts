@@ -1,5 +1,5 @@
 import { fetchFacilityDetailBundle } from "@/src/lib/welfare/facilities";
-import { evaluationAForLongTermAdminSym } from "@/src/lib/welfare/ltc-evaluation-a";
+import { evaluationAForLongTermAdminSym, evaluationResultsForFacility } from "@/src/lib/welfare/ltc-evaluation-a";
 import { welfareErrorPayload, welfareErrorStatus } from "@/src/lib/welfare/national";
 
 export async function GET(request: Request) {
@@ -21,6 +21,11 @@ export async function GET(request: Request) {
     return Response.json({
       ...result,
       evaluationA: evaluationAForLongTermAdminSym(longTermAdminSym),
+      evaluationResults: evaluationResultsForFacility({
+        longTermAdminSym,
+        sourceCode: adminPttnCd,
+        regionName: ctpvNm,
+      }),
     });
   } catch (error) {
     return Response.json(

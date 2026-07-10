@@ -14,7 +14,7 @@ import {
   type FacilityDetailSection,
   type FacilityType,
 } from "@/src/lib/welfare/facilities";
-import type { LongTermCareEvaluationARecord } from "@/src/lib/welfare/ltc-evaluation-a";
+import type { LongTermCareEvaluationARecord, LongTermCareEvaluationResultGroup } from "@/src/lib/welfare/ltc-evaluation-a";
 import { longTermCareCodesFor } from "@/src/lib/welfare/ltc-service-type-map";
 
 type SearchState = {
@@ -467,6 +467,8 @@ function FacilityListItem({ item, onSelect, selected }: { item: FacilityCandidat
   const isEmptyOccupancy = showOccupancy && currentOccupancy === 0;
   const evaluationA = evaluationAFromItem(item);
   const evaluationSummary = evaluationASummary(evaluationA);
+  const evaluationResults = evaluationResultsFromItem(item);
+  const latestEvaluation = latestEvaluationFromGroups(evaluationResults);
   const cardClass = selected
     ? isEmptyOccupancy
       ? "border-[#8a8f98] bg-[#f1f2f4]"
@@ -488,6 +490,7 @@ function FacilityListItem({ item, onSelect, selected }: { item: FacilityCandidat
         <span className={badgeClass}>{item.facilityType}</span>
         {sourceKindLabel ? <span className={badgeClass}>{sourceKindLabel}</span> : null}
         {currentOccupancy !== null ? <span className={badgeClass}>현원 {currentOccupancy}명</span> : null}
+        {latestEvaluation ? <span className={badgeClass}>최근 평가 {latestEvaluation.year} {latestEvaluation.grade}</span> : null}
         {evaluationA.length > 0 ? <span className={badgeClass}>평가 우수 {evaluationSummary.maxCount}회</span> : null}
       </div>
       <p className={`mt-3 text-[11px] font-black ${isEmptyOccupancy ? "text-[#6d737c]" : "text-[#a50034]"}`}>기관명</p>
@@ -583,6 +586,9 @@ function FacilityOverview({ detailBundle, item }: { detailBundle: FacilityDetail
   const evaluationA = evaluationAFromDetailBundle(detailBundle);
   const listEvaluationA = evaluationAFromItem(item);
   const displayedEvaluationA = evaluationA.length > 0 ? evaluationA : listEvaluationA;
+  const evaluationResults = evaluationResultsFromDetailBundle(detailBundle);
+  const listEvaluationResults = evaluationResultsFromItem(item);
+  const displayedEvaluationResults = evaluationResults.length > 0 ? evaluationResults : listEvaluationResults;
 
   return (
     <article>
@@ -623,14 +629,48 @@ function FacilityOverview({ detailBundle, item }: { detailBundle: FacilityDetail
           <dd>{[rawText("longTermPeribRgtDt"), rawText("stpRptDt")].filter(Boolean).join(" / ") || "-"}</dd>
         </div>
       </dl>
+      <EvaluationResultsSection records={displayedEvaluationResults} />
       <EvaluationASection records={displayedEvaluationA} />
       <details className="mt-4 rounded-[8px] border border-[#e186ad]/45 bg-[#fff7fb] p-3">
         <summary className="cursor-pointer text-xs font-black text-[#a50034]">상세 원자료 보기</summary>
         <pre className="mt-3 max-h-80 overflow-auto rounded-[6px] bg-white p-3 text-[11px] font-bold leading-5 text-[#5f3145]">
-          {JSON.stringify({ list: rawList, generalDetail: rawDetail, addressResolution, evaluationA: displayedEvaluationA }, null, 2)}
+          {JSON.stringify({ list: rawList, generalDetail: rawDetail, addressResolution, evaluationResults: displayedEvaluationResults, evaluationA: displayedEvaluationA }, null, 2)}
         </pre>
       </details>
     </article>
+  );
+}
+
+function EvaluationResultsSection({ records }: { records: LongTermCareEvaluationResultGroup[] }) {
+  if (records.length === 0) return null;
+
+  return (
+    <section className="mt-4 rounded-[8px] border border-[#e186ad]/55 bg-[#fff7fb] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#a50034]">Evaluation Result</p>
+          <h4 className="mt-1 text-base font-black text-[#a50034]">평가 결과</h4>
+        </div>
+        <span className="rounded-full border border-[#e186ad]/65 bg-white px-3 py-1 text-xs font-black text-[#a50034]">
+          {records.length}개 급여종류
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {records.map((record, index) => (
+          <div className="rounded-[8px] bg-white p-3 text-sm font-bold text-[#3f2432]" key={`${record.facilityKey}:${record.benefitType}:${index}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[#a50034]">{record.benefitType || "급여종류 확인 필요"}</span>
+              {record.latestEvaluation ? (
+                <span className="rounded-full bg-[#fff0f6] px-2 py-1 text-xs font-black text-[#a50034]">
+                  최근 {record.latestEvaluation.year || record.latestEvaluation.date} {evaluationGradeWithScore(record.latestEvaluation)}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[#7a4b5f]">{evaluationTimelineWithScores(record) || "평가 이력 확인 필요"}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -703,13 +743,31 @@ function evaluationAFromDetailBundle(detailBundle: FacilityDetailBundle | null) 
   return evaluationAFromUnknown(detailBundle?.evaluationA);
 }
 
+function evaluationResultsFromItem(item: FacilityCandidate) {
+  const raw = item.raw && typeof item.raw === "object" && !Array.isArray(item.raw) ? item.raw as Record<string, unknown> : {};
+  return evaluationResultsFromUnknown(raw.evaluationResults);
+}
+
+function evaluationResultsFromDetailBundle(detailBundle: FacilityDetailBundle | null) {
+  return evaluationResultsFromUnknown(detailBundle?.evaluationResults);
+}
+
 function evaluationAFromUnknown(value: unknown): LongTermCareEvaluationARecord[] {
   if (!Array.isArray(value)) return [];
   return value.filter(isEvaluationARecord);
 }
 
+function evaluationResultsFromUnknown(value: unknown): LongTermCareEvaluationResultGroup[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isEvaluationResultGroup);
+}
+
 function isEvaluationARecord(value: unknown): value is LongTermCareEvaluationARecord {
   return typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as LongTermCareEvaluationARecord).facilitySymbol === "string";
+}
+
+function isEvaluationResultGroup(value: unknown): value is LongTermCareEvaluationResultGroup {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as LongTermCareEvaluationResultGroup).facilityKey === "string";
 }
 
 function evaluationASummary(records: LongTermCareEvaluationARecord[]) {
@@ -723,6 +781,26 @@ function yearGradesText(record: LongTermCareEvaluationARecord) {
     .filter(([, grade]) => String(grade).trim())
     .map(([year, grade]) => `${year}년 ${grade}`)
     .join(" · ");
+}
+
+function latestEvaluationFromGroups(records: LongTermCareEvaluationResultGroup[]) {
+  for (const record of records) {
+    if (record.latestEvaluation?.grade) return record.latestEvaluation;
+  }
+  return null;
+}
+
+function evaluationGradeWithScore(evaluation: LongTermCareEvaluationResultGroup["latestEvaluation"]) {
+  if (!evaluation) return "";
+  const grade = evaluation.grade || "-";
+  return evaluation.totalScore ? `${grade}(${evaluation.totalScore})` : grade;
+}
+
+function evaluationTimelineWithScores(record: LongTermCareEvaluationResultGroup) {
+  return record.evaluations
+    .filter((evaluation) => evaluation.grade || evaluation.year || evaluation.date)
+    .map((evaluation) => `${evaluation.year || evaluation.date} ${evaluationGradeWithScore(evaluation)}`.trim())
+    .join(" / ");
 }
 
 function overviewPhoneFrom(record: Record<string, unknown>) {

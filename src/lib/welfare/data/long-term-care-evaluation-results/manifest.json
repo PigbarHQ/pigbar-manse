@@ -1,0 +1,232 @@
+{
+  "sourceFile": "/Users/thezoooz/Downloads/국민건강보험공단_장기요양기관 평가 결과_20260625.csv",
+  "encoding": "cp949",
+  "recordCount": 27947,
+  "regionCount": 17,
+  "key": "normalized digits-only 장기요양기관기호",
+  "grouping": "same facility key + same 급여종류",
+  "regions": [
+    {
+      "region": "강원특별자치도",
+      "file": "by-region/gangwon.json",
+      "recordCount": 1088,
+      "facilityBenefitGroupCount": 876,
+      "gradeCounts": {
+        "A": 245,
+        "B": 339,
+        "C": 220,
+        "D": 114,
+        "E": 170
+      }
+    },
+    {
+      "region": "경기도",
+      "file": "by-region/gyeonggi.json",
+      "recordCount": 6620,
+      "facilityBenefitGroupCount": 5676,
+      "gradeCounts": {
+        "A": 1228,
+        "B": 2307,
+        "C": 1549,
+        "D": 853,
+        "E": 682,
+        "UNKNOWN": 1
+      }
+    },
+    {
+      "region": "경상남도",
+      "file": "by-region/gyeongnam.json",
+      "recordCount": 2048,
+      "facilityBenefitGroupCount": 1856,
+      "gradeCounts": {
+        "A": 536,
+        "B": 668,
+        "C": 381,
+        "D": 228,
+        "E": 235
+      }
+    },
+    {
+      "region": "경상북도",
+      "file": "by-region/gyeongbuk.json",
+      "recordCount": 2046,
+      "facilityBenefitGroupCount": 1764,
+      "gradeCounts": {
+        "A": 461,
+        "B": 755,
+        "C": 406,
+        "D": 238,
+        "E": 186
+      }
+    },
+    {
+      "region": "광주광역시",
+      "file": "by-region/gwangju.json",
+      "recordCount": 779,
+      "facilityBenefitGroupCount": 703,
+      "gradeCounts": {
+        "A": 201,
+        "B": 268,
+        "C": 171,
+        "D": 71,
+        "E": 68
+      }
+    },
+    {
+      "region": "대구광역시",
+      "file": "by-region/daegu.json",
+      "recordCount": 1405,
+      "facilityBenefitGroupCount": 1243,
+      "gradeCounts": {
+        "A": 408,
+        "B": 493,
+        "C": 246,
+        "D": 126,
+        "E": 132
+      }
+    },
+    {
+      "region": "대전광역시",
+      "file": "by-region/daejeon.json",
+      "recordCount": 792,
+      "facilityBenefitGroupCount": 704,
+      "gradeCounts": {
+        "A": 184,
+        "B": 260,
+        "C": 173,
+        "D": 86,
+        "E": 89
+      }
+    },
+    {
+      "region": "부산광역시",
+      "file": "by-region/busan.json",
+      "recordCount": 1362,
+      "facilityBenefitGroupCount": 1271,
+      "gradeCounts": {
+        "A": 379,
+        "B": 441,
+        "C": 268,
+        "D": 139,
+        "E": 135
+      }
+    },
+    {
+      "region": "서울특별시",
+      "file": "by-region/seoul.json",
+      "recordCount": 3247,
+      "facilityBenefitGroupCount": 2931,
+      "gradeCounts": {
+        "A": 710,
+        "B": 1024,
+        "C": 713,
+        "D": 407,
+        "E": 393
+      }
+    },
+    {
+      "region": "세종특별자치시",
+      "file": "by-region/sejong.json",
+      "recordCount": 95,
+      "facilityBenefitGroupCount": 87,
+      "gradeCounts": {
+        "A": 23,
+        "B": 44,
+        "C": 12,
+        "D": 5,
+        "E": 11
+      }
+    },
+    {
+      "region": "울산광역시",
+      "file": "by-region/ulsan.json",
+      "recordCount": 413,
+      "facilityBenefitGroupCount": 378,
+      "gradeCounts": {
+        "A": 102,
+        "B": 147,
+        "C": 83,
+        "D": 41,
+        "E": 40
+      }
+    },
+    {
+      "region": "인천광역시",
+      "file": "by-region/incheon.json",
+      "recordCount": 1774,
+      "facilityBenefitGroupCount": 1572,
+      "gradeCounts": {
+        "A": 271,
+        "B": 609,
+        "C": 471,
+        "D": 204,
+        "E": 219
+      }
+    },
+    {
+      "region": "전라남도",
+      "file": "by-region/jeonnam.json",
+      "recordCount": 1637,
+      "facilityBenefitGroupCount": 1400,
+      "gradeCounts": {
+        "A": 385,
+        "B": 562,
+        "C": 366,
+        "D": 164,
+        "E": 160
+      }
+    },
+    {
+      "region": "전북특별자치도",
+      "file": "by-region/jeonbuk.json",
+      "recordCount": 1601,
+      "facilityBenefitGroupCount": 1438,
+      "gradeCounts": {
+        "A": 378,
+        "B": 568,
+        "C": 341,
+        "D": 147,
+        "E": 167
+      }
+    },
+    {
+      "region": "제주특별자치도",
+      "file": "by-region/jeju.json",
+      "recordCount": 308,
+      "facilityBenefitGroupCount": 250,
+      "gradeCounts": {
+        "A": 135,
+        "B": 77,
+        "C": 52,
+        "D": 23,
+        "E": 21
+      }
+    },
+    {
+      "region": "충청남도",
+      "file": "by-region/chungnam.json",
+      "recordCount": 1589,
+      "facilityBenefitGroupCount": 1388,
+      "gradeCounts": {
+        "A": 264,
+        "B": 515,
+        "C": 392,
+        "D": 226,
+        "E": 192
+      }
+    },
+    {
+      "region": "충청북도",
+      "file": "by-region/chungbuk.json",
+      "recordCount": 1143,
+      "facilityBenefitGroupCount": 949,
+      "gradeCounts": {
+        "A": 262,
+        "B": 393,
+        "C": 261,
+        "D": 119,
+        "E": 108
+      }
+    }
+  ]
+}

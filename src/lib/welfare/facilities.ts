@@ -7,7 +7,7 @@ import {
   longTermCareCodesFor,
   type FacilityType,
 } from "@/src/lib/welfare/ltc-service-type-map";
-import type { LongTermCareEvaluationARecord } from "@/src/lib/welfare/ltc-evaluation-a";
+import type { LongTermCareEvaluationARecord, LongTermCareEvaluationResultGroup } from "@/src/lib/welfare/ltc-evaluation-a";
 
 export { FACILITY_TYPES, type FacilityType } from "@/src/lib/welfare/ltc-service-type-map";
 export { FACILITY_TYPE_GROUPS, FACILITY_TYPE_OPTIONS, labelForLongTermCareCode } from "@/src/lib/welfare/ltc-service-type-map";
@@ -45,6 +45,7 @@ export type FacilityDetailBundle = {
   generalDetail: Record<string, unknown> | null;
   addressResolution: AddressResolution | null;
   evaluationA?: LongTermCareEvaluationARecord[];
+  evaluationResults?: LongTermCareEvaluationResultGroup[];
   sections: FacilityDetailSection[];
 };
 

@@ -6,7 +6,7 @@ import test from "node:test";
 import { GET as analyzeWelfareAttachment } from "../app/api/welfare/attachment/analyze/route";
 import { GET as fetchLongTermCareFacilityDetail } from "../app/api/welfare/facilities/long-term-care/detail/route";
 import { GET as searchLongTermCareFacilities } from "../app/api/welfare/facilities/long-term-care/list/route";
-import { evaluationAForLongTermAdminSym, normalizeLongTermCareFacilityKey } from "../src/lib/welfare/ltc-evaluation-a";
+import { evaluationAForLongTermAdminSym, evaluationResultsForFacility, normalizeLongTermCareFacilityKey } from "../src/lib/welfare/ltc-evaluation-a";
 import { longTermCareCodesFor } from "../src/lib/welfare/ltc-service-type-map";
 import { fetchLocalWelfareDetail, fetchLocalWelfareList, fetchNationalWelfareDetail, fetchNationalWelfareList, parseXmlToJson, WelfareApiError } from "../src/lib/welfare/national";
 
@@ -45,6 +45,21 @@ test("Long-term care evaluation A index maps facility symbol as lookup key", () 
   assert.equal(normalizeLongTermCareFacilityKey(records[0].facilitySymbol), "11144000012");
   assert.equal(records[0].facilityName, "시립서부노인전문요양센터");
   assert.equal(records[0].aGradeCount, 6);
+});
+
+test("Long-term care evaluation result region index maps facility and benefit type", () => {
+  const records = evaluationResultsForFacility({
+    longTermAdminSym: "3-28177-00447",
+    sourceCode: "C01",
+    regionName: "인천광역시",
+  });
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].facilityKey, "32817700447");
+  assert.equal(records[0].benefitType, "04.방문요양");
+  assert.equal(records[0].latestEvaluation?.year, "2024");
+  assert.equal(records[0].latestEvaluation?.grade, "B");
+  assert.equal(records[0].gradeTimeline, "2024 B");
 });
 
 test("Welfare XML parser and normalizer create list response without exposing service key to UI", async () => {
@@ -667,7 +682,7 @@ test("Long-term care facility detail route attaches evaluation A records by faci
     </response>
   `)) as typeof fetch;
 
-  const response = await fetchLongTermCareFacilityDetail(new Request("http://localhost/api/welfare/facilities/long-term-care/detail?longTermAdminSym=11144000012&adminPttnCd=A03"));
+  const response = await fetchLongTermCareFacilityDetail(new Request("http://localhost/api/welfare/facilities/long-term-care/detail?longTermAdminSym=11144000012&adminPttnCd=A03&ctpvNm=서울특별시"));
   const data = await response.json();
 
   assert.equal(response.status, 200);
@@ -675,6 +690,8 @@ test("Long-term care facility detail route attaches evaluation A records by faci
   assert.equal(data.evaluationA[0].facilitySymbol, "1-11440-00012");
   assert.equal(normalizeLongTermCareFacilityKey(data.evaluationA[0].facilitySymbol), "11144000012");
   assert.equal(data.evaluationA[0].facilityName, "시립서부노인전문요양센터");
+  assert.equal(data.evaluationResults.length > 0, true);
+  assert.equal(data.evaluationResults[0].latestEvaluation.grade, "A");
 
   process.env.DATA_GO_KR_SERVICE_KEY = previousKey;
 });

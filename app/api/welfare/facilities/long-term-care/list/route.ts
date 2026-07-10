@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     }
 
     const result = await searchFacilityCandidates({ ctpvNm, sggNm, facilityType, facilityName, includeAcceptanceDetails });
-    return Response.json(enrichFacilityCandidatesWithEvaluationA(result));
+    return Response.json(enrichFacilityCandidatesWithEvaluationA(result, { regionName: ctpvNm }));
   } catch (error) {
     return Response.json(
       welfareErrorPayload(error),
