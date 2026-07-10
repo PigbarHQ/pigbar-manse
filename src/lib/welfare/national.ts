@@ -1,9 +1,44 @@
+import path from "node:path";
+
 type WelfareApiConfig = {
   source: WelfareSource;
   baseEndpoint: string;
   listPath: string;
   detailPath: string;
 };
+
+export class WelfareApiError extends Error {
+  status: number;
+  retryAfter: string;
+
+  constructor(status: number, retryAfter = "") {
+    const message = status === 429
+      ? "복지로 API 요청 제한에 걸렸습니다. 잠시 후 다시 조회해주세요."
+      : `Bokjiro API failed: ${status}`;
+    super(message);
+    this.name = "WelfareApiError";
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
+export function welfareErrorStatus(error: unknown) {
+  return error instanceof WelfareApiError ? error.status : 500;
+}
+
+export function welfareErrorPayload(error: unknown) {
+  if (error instanceof WelfareApiError) {
+    return {
+      error: error.message,
+      status: error.status,
+      retryAfter: error.retryAfter,
+    };
+  }
+
+  return {
+    error: error instanceof Error ? error.message : "Unknown welfare API error",
+  };
+}
 
 export type LocalWelfareRegion = {
   ctpvNm?: string;
@@ -50,6 +85,12 @@ export type WelfareListItem = {
   raw: unknown;
 };
 
+export type WelfareFormItem = {
+  name: string;
+  url: string;
+  extension: string;
+};
+
 export type WelfareDetailItem = {
   source: WelfareSource;
   id: string;
@@ -62,10 +103,11 @@ export type WelfareDetailItem = {
   selectionCriteria: string;
   benefitContent: string;
   applicationMethods: string;
+  applicationLinks: string[];
   contacts: string[];
   homepages: string[];
   laws: string[];
-  forms: string[];
+  forms: WelfareFormItem[];
   detailLink: string;
   raw: unknown;
 };
@@ -226,15 +268,50 @@ function collectRecords(value: unknown, names: string[], results: Record<string,
   return results;
 }
 
+type WelfareCacheEntry = {
+  expiresAt: number;
+  value: Record<string, unknown>;
+};
+
+const WELFARE_CACHE_TTL_MS = 1000 * 60 * 5;
+const welfareResponseCache = new Map<string, WelfareCacheEntry>();
+
 function collectDetailRows(value: unknown, names: string[]) {
   return collectRecords(value, names)
     .map((record) => {
-      const name = pick(record, ["servSeDetailNm", "name", "title"]);
-      const link = pick(record, ["servSeDetailLink", "link", "url", "content"]);
+      const name = pick(record, ["servSeDetailNm", "wlfareInfoReldNm", "name", "title"]);
+      const link = pick(record, ["servSeDetailLink", "wlfareInfoReldCn", "link", "url", "content"]);
       if (name && link) return `${name}: ${link}`;
       return name || link;
     })
     .filter(Boolean);
+}
+
+function extensionFromFileName(fileName: string) {
+  return path.extname(fileName).replace(".", "").toLowerCase();
+}
+
+function collectFormItems(raw: Record<string, unknown>) {
+  const formRows = collectRecords(raw, ["basfrmList", "formList"]);
+  if (formRows.length > 0) {
+    return formRows
+      .map((record) => {
+        const name = pick(record, ["wlfareInfoReldNm", "servSeDetailNm", "basfrmNm", "formNm", "name", "title"]);
+        const url = pick(record, ["wlfareInfoReldCn", "servSeDetailLink", "link", "url", "content"]);
+        return {
+          name: name || url,
+          url,
+          extension: extensionFromFileName(name),
+        };
+      })
+      .filter((item) => item.name || item.url);
+  }
+
+  return collectValues(raw, ["basfrmNm", "formNm", "form"]).map((value) => ({
+    name: value,
+    url: "",
+    extension: extensionFromFileName(value),
+  }));
 }
 
 function normalizeListItem(raw: Record<string, unknown>, source: WelfareSource): WelfareListItem {
@@ -281,14 +358,15 @@ function normalizeDetailItem(raw: Record<string, unknown>, source: WelfareSource
     region,
     ministry,
     summary: pick(raw, ["wlfareInfoOutlCn", "servDgst", "servSumry", "summary"]),
-    targetDetail: pick(raw, ["tgtrDtlCn", "trgterDtlCn", "targetDetail"]),
+    targetDetail: pick(raw, ["sprtTrgtCn", "tgtrDtlCn", "trgterDtlCn", "targetDetail"]),
     selectionCriteria: pick(raw, ["slctCritCn", "selectionCriteria"]),
     benefitContent: pick(raw, ["alwServCn", "benefitContent", "sprtCn"]),
     applicationMethods: applicationRows.join("\n") || pick(raw, ["aplyMtdCn", "applicationMethods"]),
+    applicationLinks: applicationRows,
     contacts: contactRows.length > 0 ? contactRows : collectValues(raw, ["inqplCtadr", "inqNum", "rprsCtadr", "telNo"]),
     homepages,
     laws: lawRows.length > 0 ? lawRows : collectValues(raw, ["baslawNm", "lawNm", "baslaw"]),
-    forms: collectValues(raw, ["basfrmNm", "formNm", "form"]),
+    forms: collectFormItems(raw),
     detailLink: pick(raw, ["servDtlLink", "detailLink", "hmpgNm", "hmpgUrl", "url"]) || homepages[0] || "",
     raw,
   };
@@ -305,13 +383,24 @@ async function fetchWelfare(config: WelfareApiConfig, path: string, params: Reco
     url.searchParams.set(key, value);
   });
 
+  const cacheKey = `${config.source}:${path}:${JSON.stringify(params)}`;
+  const cached = welfareResponseCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   const response = await fetch(url, { cache: "no-store" });
   const xml = await response.text();
   const raw = parseXmlToJson(xml);
 
   if (!response.ok) {
-    throw new Error(`Bokjiro API failed: ${response.status}`);
+    throw new WelfareApiError(response.status, response.headers.get("retry-after") ?? "");
   }
+
+  welfareResponseCache.set(cacheKey, {
+    expiresAt: Date.now() + WELFARE_CACHE_TTL_MS,
+    value: raw,
+  });
 
   return raw;
 }

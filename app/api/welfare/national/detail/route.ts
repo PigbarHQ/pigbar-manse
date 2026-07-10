@@ -1,4 +1,4 @@
-import { fetchNationalWelfareDetail } from "@/src/lib/welfare/national";
+import { fetchNationalWelfareDetail, welfareErrorPayload, welfareErrorStatus } from "@/src/lib/welfare/national";
 
 export async function GET(request: Request) {
   try {
@@ -12,10 +12,8 @@ export async function GET(request: Request) {
     return Response.json(await fetchNationalWelfareDetail(servId));
   } catch (error) {
     return Response.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown welfare detail error",
-      },
-      { status: 500 },
+      welfareErrorPayload(error),
+      { status: welfareErrorStatus(error) },
     );
   }
 }

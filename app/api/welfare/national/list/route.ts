@@ -1,4 +1,4 @@
-import { fetchNationalWelfareList } from "@/src/lib/welfare/national";
+import { fetchNationalWelfareList, welfareErrorPayload, welfareErrorStatus } from "@/src/lib/welfare/national";
 
 export async function GET(request: Request) {
   try {
@@ -9,10 +9,8 @@ export async function GET(request: Request) {
     return Response.json(await fetchNationalWelfareList(searchWrd, { lifeArray }));
   } catch (error) {
     return Response.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown welfare list error",
-      },
-      { status: 500 },
+      welfareErrorPayload(error),
+      { status: welfareErrorStatus(error) },
     );
   }
 }

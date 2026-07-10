@@ -1258,6 +1258,12 @@ function RepublishForm({
         >
           복지혜택 테스트
         </Link>
+        <Link
+          className={`flex h-11 w-full items-center justify-center rounded-[4px] text-sm font-black ${experience.theme.secondaryButton}`}
+          href="/welfare-facilities"
+        >
+          지역 기관/시설 찾기
+        </Link>
         {error ? <p className={`text-xs font-bold leading-5 ${inputTheme.error}`}>{error}</p> : null}
       </form>
     </ExperienceInput>

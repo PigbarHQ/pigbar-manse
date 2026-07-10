@@ -184,74 +184,74 @@ export function WelfareTestClient() {
   }
 
   return (
-    <main className="min-h-screen bg-[#100d08] px-4 py-8 text-[#f7e8c3] sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[linear-gradient(135deg,#fff7fb_0%,#ffffff_46%,#ffeaf2_100%)] px-4 py-8 text-[#2f1724] sm:px-6 lg:px-8">
       <section className="mx-auto w-full max-w-6xl">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.26em] text-[#d6a84f]">Pigbar Manse</p>
+            <p className="text-xs font-black uppercase tracking-[0.26em] text-[#a50034]">Pigbar Manse</p>
             <h1 className="mt-3 text-3xl font-black">복지혜택 테스트</h1>
-            <p className="mt-2 text-sm font-bold text-[#cbb98e]">공공데이터포털 중앙정부·지자체 복지서비스 API 통합 검색 확인 화면입니다.</p>
+            <p className="mt-2 text-sm font-bold text-[#7a4b5f]">공공데이터포털 중앙정부·지자체 복지서비스 API 통합 검색 확인 화면입니다.</p>
           </div>
-          <Link className="inline-flex h-10 items-center rounded-[4px] border border-[#d6a84f]/50 px-4 text-sm font-black text-[#f7d37a]" href="/">
+          <Link className="inline-flex h-10 items-center rounded-[4px] border border-[#e186ad]/65 px-4 text-sm font-black text-[#a50034]" href="/">
             Manse로 돌아가기
           </Link>
         </div>
 
-        <form className="mt-8 grid gap-3 rounded-[12px] border border-[#d6a84f]/30 bg-black/30 p-4 md:grid-cols-[1.2fr_1fr_1fr_auto]" onSubmit={search}>
+        <form className="mt-8 grid gap-3 rounded-[12px] border border-[#e186ad]/65 bg-white/90 p-4 shadow-[0_18px_48px_rgba(165,0,52,0.08)] md:grid-cols-[1.2fr_1fr_1fr_auto]" onSubmit={search}>
           <label className="grid gap-1">
-            <span className="text-xs font-black text-[#d6a84f]">검색어</span>
+            <span className="text-xs font-black text-[#a50034]">검색어</span>
             <input
-              className="h-11 rounded-[4px] border border-[#d6a84f]/30 bg-black/40 px-3 text-sm font-bold text-[#f7e8c3] outline-none"
+              className="h-11 rounded-[4px] border border-[#e186ad]/45 bg-white px-3 text-sm font-bold text-[#2f1724] outline-none"
               onChange={(event) => setSearchWrd(event.target.value)}
               placeholder="검색어"
               value={searchWrd}
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs font-black text-[#d6a84f]">광역</span>
+            <span className="text-xs font-black text-[#a50034]">광역</span>
             <input
-              className="h-11 rounded-[4px] border border-[#d6a84f]/30 bg-black/40 px-3 text-sm font-bold text-[#f7e8c3] outline-none"
+              className="h-11 rounded-[4px] border border-[#e186ad]/45 bg-white px-3 text-sm font-bold text-[#2f1724] outline-none"
               onChange={(event) => setCtpvNm(event.target.value)}
               placeholder="광역"
               value={ctpvNm}
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs font-black text-[#d6a84f]">기초</span>
+            <span className="text-xs font-black text-[#a50034]">기초</span>
             <input
-              className="h-11 rounded-[4px] border border-[#d6a84f]/30 bg-black/40 px-3 text-sm font-bold text-[#f7e8c3] outline-none"
+              className="h-11 rounded-[4px] border border-[#e186ad]/45 bg-white px-3 text-sm font-bold text-[#2f1724] outline-none"
               onChange={(event) => setSggNm(event.target.value)}
               placeholder="기초"
               value={sggNm}
             />
           </label>
-          <button className="h-11 self-end rounded-[4px] bg-[#d6a84f] px-5 text-sm font-black text-black disabled:opacity-60" disabled={loading} type="submit">
+          <button className="h-11 self-end rounded-[4px] bg-[#a50034] px-5 text-sm font-black text-white disabled:opacity-60" disabled={loading} type="submit">
             {loading ? "조회 중..." : "검색"}
           </button>
           <label className="flex items-center gap-2 md:col-span-4">
             <input
               checked={elderlyOnly}
-              className="size-4 accent-[#d6a84f]"
+              className="size-4 accent-[#a50034]"
               onChange={(event) => setElderlyOnly(event.target.checked)}
               type="checkbox"
             />
-            <span className="text-sm font-black text-[#f7d37a]">노년 대상만 보기</span>
-            <span className="text-xs font-bold text-[#cbb98e]">중앙정부와 지자체 조회에 생애주기 필터를 함께 적용합니다.</span>
+            <span className="text-sm font-black text-[#a50034]">노년 대상만 보기</span>
+            <span className="text-xs font-bold text-[#7a4b5f]">중앙정부와 지자체 조회에 생애주기 필터를 함께 적용합니다.</span>
           </label>
         </form>
 
-        <p className="mt-3 text-sm font-bold text-[#cbb98e]">{status}</p>
+        <p className="mt-3 text-sm font-bold text-[#7a4b5f]">{status}</p>
 
         <div className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-[12px] border border-[#d6a84f]/25 bg-black/25 p-4">
+          <section className="rounded-[12px] border border-[#e186ad]/55 bg-white/75 p-4">
             <h2 className="text-lg font-black">상담용 추천 후보</h2>
             <div className="mt-4 grid gap-3">
               {items.map((item) => (
                 <button
-                  className={`rounded-[8px] border p-4 text-left transition hover:border-[#d6a84f]/70 ${
+                  className={`rounded-[8px] border p-4 text-left transition hover:bg-[#fff0f6] ${
                     selectedId === itemKey(item)
-                      ? "border-[#d6a84f] bg-[#2a1d0c] shadow-[0_0_28px_rgba(214,168,79,0.22)]"
-                      : "border-[#d6a84f]/20 bg-[#1a140b]"
+                      ? "border-[#e186ad]/65 bg-[#ffd4e5] shadow-[0_16px_36px_rgba(165,0,52,0.14)]"
+                      : "border-[#e186ad]/65 bg-white"
                   }`}
                   key={itemKey(item)}
                   onClick={() => loadDetail(item)}
@@ -259,19 +259,19 @@ export function WelfareTestClient() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <span className="mb-2 inline-flex rounded-full border border-[#d6a84f]/35 bg-black/30 px-2 py-1 text-[10px] font-black text-[#f7d37a]">
+                      <span className="mb-2 inline-flex rounded-full border border-[#e186ad]/65 bg-white/85 px-2 py-1 text-[10px] font-black text-[#a50034]">
                         {sourceLabel(item.source)}
                       </span>
-                      <p className="font-black text-[#f7d37a]">{item.name || "-"}</p>
-                      <p className="mt-1 text-xs font-bold text-[#cbb98e]">{item.provider || "-"}</p>
-                      <p className="mt-1 text-xs font-bold text-[#9e8c64]">{item.region || "-"}</p>
+                      <p className="font-black text-[#a50034]">{item.name || "-"}</p>
+                      <p className="mt-1 text-xs font-bold text-[#7a4b5f]">{item.provider || "-"}</p>
+                      <p className="mt-1 text-xs font-bold text-[#9b6b7d]">{item.region || "-"}</p>
                     </div>
-                    {selectedId === itemKey(item) ? <span className="shrink-0 rounded-full bg-[#d6a84f] px-2 py-1 text-[10px] font-black text-black">선택됨</span> : null}
+                    {selectedId === itemKey(item) ? <span className="shrink-0 rounded-full bg-[#a50034] px-2 py-1 text-[10px] font-black text-white">선택됨</span> : null}
                   </div>
-                  <p className="mt-2 line-clamp-3 text-sm font-bold leading-6 text-[#efe0bb]">{item.summary || "-"}</p>
+                  <p className="mt-2 line-clamp-3 text-sm font-bold leading-6 text-[#3f2432]">{item.summary || "-"}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {memoTags(item).map((tag) => (
-                      <span className="rounded-full bg-[#d6a84f] px-2.5 py-1 text-[11px] font-black text-black" key={tag}>
+                      <span className="rounded-full bg-[#a50034] px-2.5 py-1 text-[11px] font-black text-white" key={tag}>
                         {tag}
                       </span>
                     ))}
@@ -284,25 +284,25 @@ export function WelfareTestClient() {
                   </div>
                 </button>
               ))}
-              {items.length === 0 ? <p className="text-sm font-bold text-[#cbb98e]">검색 결과가 없습니다.</p> : null}
+              {items.length === 0 ? <p className="text-sm font-bold text-[#7a4b5f]">검색 결과가 없습니다.</p> : null}
             </div>
           </section>
 
-          <section className="scroll-mt-6 rounded-[12px] border border-[#d6a84f]/40 bg-black/30 p-4 shadow-[0_0_36px_rgba(214,168,79,0.08)]" ref={detailRef}>
+          <section className="scroll-mt-6 rounded-[12px] border border-[#e186ad]/55 bg-white/85 p-4 shadow-[0_18px_42px_rgba(165,0,52,0.10)]" ref={detailRef}>
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#d6a84f]">Selected Service</p>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-[#a50034]">Selected Service</p>
                 <h2 className="mt-2 text-2xl font-black">상세정보</h2>
               </div>
               {detail?.id ? (
                 <div className="flex flex-wrap justify-end gap-2">
-                  <span className="rounded-full border border-[#d6a84f]/30 px-3 py-1 text-xs font-black text-[#f7d37a]">{sourceLabel(detail.source)}</span>
-                  <span className="rounded-full border border-[#d6a84f]/30 px-3 py-1 text-xs font-black text-[#f7d37a]">{detail.id}</span>
+                  <span className="rounded-full border border-[#e186ad]/45 px-3 py-1 text-xs font-black text-[#a50034]">{sourceLabel(detail.source)}</span>
+                  <span className="rounded-full border border-[#e186ad]/45 px-3 py-1 text-xs font-black text-[#a50034]">{detail.id}</span>
                 </div>
               ) : null}
             </div>
             {detail ? (
-              <div className="mt-4 grid gap-4 text-sm font-bold leading-6 text-[#efe0bb]">
+              <div className="mt-4 grid gap-4 text-sm font-bold leading-6 text-[#3f2432]">
                 <DetailRow label="서비스명" value={detail.name} />
                 <DetailRow label="제공기관" value={detail.provider || detail.ministry} />
                 <DetailRow label="지역" value={detail.region} />
@@ -314,15 +314,15 @@ export function WelfareTestClient() {
                 <DetailRow label="문의처" value={paragraph(detail.contacts)} />
                 <DetailRow label="근거법령" value={paragraph(detail.laws)} />
                 <DetailRow label="원문 링크" value={detail.detailLink || paragraph(detail.homepages)} />
-                <details className="rounded-[8px] border border-[#d6a84f]/15 bg-[#1a140b]/70 p-3">
-                  <summary className="cursor-pointer text-xs font-black text-[#d6a84f]">상세 응답 raw JSON</summary>
-                  <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-xs font-bold leading-5 text-[#d8c89d]">
+                <details className="rounded-[8px] border border-[#e186ad]/45 bg-white/70 p-3">
+                  <summary className="cursor-pointer text-xs font-black text-[#a50034]">상세 응답 raw JSON</summary>
+                  <pre className="mt-3 max-h-[420px] overflow-auto whitespace-pre-wrap break-words text-xs font-bold leading-5 text-[#5f4050]">
                     {JSON.stringify(detail.raw, null, 2)}
                   </pre>
                 </details>
               </div>
             ) : (
-              <p className="mt-4 text-sm font-bold text-[#cbb98e]">목록에서 항목을 선택하면 상세정보가 표시됩니다.</p>
+              <p className="mt-4 text-sm font-bold text-[#7a4b5f]">목록에서 항목을 선택하면 상세정보가 표시됩니다.</p>
             )}
           </section>
         </div>
@@ -335,16 +335,16 @@ function Badge({ label, value }: { label: string; value: string }) {
   if (!value) return null;
 
   return (
-    <span className="rounded-full border border-[#d6a84f]/25 bg-black/25 px-2.5 py-1 text-[11px] font-black text-[#d8c89d]">
-      <span className="text-[#d6a84f]">{label}</span> {value}
+    <span className="rounded-full border border-[#e186ad]/55 bg-white/75 px-2.5 py-1 text-[11px] font-black text-[#5f4050]">
+      <span className="text-[#a50034]">{label}</span> {value}
     </span>
   );
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[8px] border border-[#d6a84f]/15 bg-[#1a140b]/70 p-3">
-      <p className="text-xs font-black text-[#d6a84f]">{label}</p>
+    <div className="rounded-[8px] border border-[#e186ad]/45 bg-white/70 p-3">
+      <p className="text-xs font-black text-[#a50034]">{label}</p>
       <p className="mt-2 whitespace-pre-wrap">{value || "-"}</p>
     </div>
   );
