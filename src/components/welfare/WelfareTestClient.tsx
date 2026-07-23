@@ -48,6 +48,12 @@ type WelfareListResponse = {
   error?: string;
 };
 
+export type DayCareEvaluationRow = {
+  facilityName: string;
+  facilityCode: string;
+  evaluationGrade: string;
+};
+
 function paragraph(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value.filter(Boolean).join("\n");
   return value?.trim() || "-";
@@ -116,7 +122,7 @@ async function fetchList(source: WelfareSource, searchWrd: string, elderlyOnly: 
   };
 }
 
-export function WelfareTestClient() {
+export function WelfareTestClient({ dayCareEvaluationRows = [] }: { dayCareEvaluationRows?: DayCareEvaluationRow[] }) {
   const [searchWrd, setSearchWrd] = useState("노인");
   const [ctpvNm, setCtpvNm] = useState("인천광역시");
   const [sggNm, setSggNm] = useState("미추홀구");
@@ -241,6 +247,48 @@ export function WelfareTestClient() {
         </form>
 
         <p className="mt-3 text-sm font-bold text-[#7a4b5f]">{status}</p>
+
+        <section className="mt-6 rounded-[12px] border border-[#e186ad]/55 bg-white/85 p-4 shadow-[0_18px_42px_rgba(165,0,52,0.08)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#a50034]">Michuhol Day Care</p>
+              <h2 className="mt-2 text-2xl font-black">인천 미추홀구 주간보호센터 평가표</h2>
+              <p className="mt-2 text-sm font-bold text-[#7a4b5f]">장기요양기관 평가 결과 파일 기준으로 주야간보호 급여만 따로 모았습니다.</p>
+            </div>
+            <span className="rounded-full border border-[#e186ad]/65 bg-[#fff7fb] px-3 py-1 text-xs font-black text-[#a50034]">
+              {dayCareEvaluationRows.length}개 기관
+            </span>
+          </div>
+          <div className="mt-4 overflow-hidden rounded-[8px] border border-[#e186ad]/45">
+            <table className="w-full border-collapse bg-white text-left text-sm">
+              <thead className="bg-[#fff0f6] text-xs font-black text-[#a50034]">
+                <tr>
+                  <th className="border-b border-[#e186ad]/35 px-4 py-3">기관명</th>
+                  <th className="border-b border-[#e186ad]/35 px-4 py-3">기관 코드</th>
+                  <th className="border-b border-[#e186ad]/35 px-4 py-3">평가등급</th>
+                </tr>
+              </thead>
+              <tbody className="font-bold text-[#3f2432]">
+                {dayCareEvaluationRows.map((row) => (
+                  <tr className="transition hover:bg-[#fff7fb]" key={`${row.facilityCode}:${row.facilityName}`}>
+                    <td className="border-b border-[#f0c3d6]/50 px-4 py-3">{row.facilityName}</td>
+                    <td className="border-b border-[#f0c3d6]/50 px-4 py-3">{row.facilityCode}</td>
+                    <td className="border-b border-[#f0c3d6]/50 px-4 py-3">
+                      <span className="inline-flex rounded-full bg-[#a50034] px-2.5 py-1 text-xs font-black text-white">{row.evaluationGrade || "-"}</span>
+                    </td>
+                  </tr>
+                ))}
+                {dayCareEvaluationRows.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-5 text-center text-sm font-bold text-[#7a4b5f]" colSpan={3}>
+                      표시할 평가 자료가 없습니다.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <div className="mt-6 grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
           <section className="rounded-[12px] border border-[#e186ad]/55 bg-white/75 p-4">

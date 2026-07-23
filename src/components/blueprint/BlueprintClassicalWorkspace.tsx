@@ -1264,6 +1264,13 @@ function RepublishForm({
         >
           지역 기관/시설 찾기
         </Link>
+        <Link
+          className={`flex min-h-11 w-full flex-col items-center justify-center rounded-[4px] px-3 py-2 text-center text-sm font-black ${experience.theme.secondaryButton}`}
+          href="/bizradar"
+        >
+          <span>BizRadar</span>
+          <span className="mt-1 text-[11px] font-bold opacity-75">기업에 맞는 공공입찰과 사업기회를 찾습니다.</span>
+        </Link>
         {error ? <p className={`text-xs font-bold leading-5 ${inputTheme.error}`}>{error}</p> : null}
       </form>
     </ExperienceInput>
